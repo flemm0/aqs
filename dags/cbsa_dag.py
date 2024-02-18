@@ -4,11 +4,8 @@ from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.amazon.aws.operators.s3 import S3CreateObjectOperator
 
-import polars as pl
-import requests
-import os
-
-from constants import RAW_DATA_PATH
+from tasks.cbsa import get_cbsa_codes, write_cbsa_parquet_data
+from tasks.monitors import get_monitors_by_cbsa
 
 default_args = {
     'owner': 'airflow',
@@ -26,41 +23,23 @@ dag = DAG(
     schedule_interval=timedelta(days=1)
 )
 
-## TODO: move functions to plugins folder
-def get_cbsa_codes() -> pl.DataFrame:
-    '''Grabs CBSA lists from AQS API endpoint and returns Polars DataFrame'''
-
-    API_KEY = os.getenv('API_KEY')
-    EMAIL = os.getenv('EMAIL')
-
-    url = f'https://aqs.epa.gov/data/api/list/cbsas?email={EMAIL}&key={API_KEY}'
-
-    response = requests.get(url)
-
-    if response.status_code != 200:
-        print(f'An error has occurred: status code: {response.status_code}')
-        return 
-
-    data = response.json()['Data']
-    df = pl.DataFrame(data)
-
-    return df
-
-def write_cbsa_parquet_data(df: pl.DataFrame) -> None:
-    '''Accepts cbsa codes in Polars DataFrame and writes out parquet file to data lake'''
-    df.write_parquet(f'{RAW_DATA_PATH}/cbsa.parquet')
-
 # Define DAG tasks
-download_from_api_task = PythonOperator(
-    task_id='fetch_raw_cbsa_codes_from_api',
+download_cbsa_info_from_api_task = PythonOperator(
+    task_id='fetch_cbsa_codes_from_api',
     python_callable=get_cbsa_codes,
     dag=dag,
 )
 
-write_parquet_to_disk_task = PythonOperator(
+write_cbsa_codes_to_disk_task = PythonOperator(
     task_id='write_cbsa_codes_parquet_data_to_disk',
     python_callable=write_cbsa_parquet_data,
     dag=dag,
+)
+
+get_monitors_by_cbsa_task = PythonOperator(
+    task_id='write_monitor_by_cbsa_data_to_disk',
+    python_callable=get_monitors_by_cbsa,
+    dag=dag
 )
 
 # create_object = S3CreateObjectOperator(
@@ -74,4 +53,5 @@ write_parquet_to_disk_task = PythonOperator(
 ready = EmptyOperator(task_id='ready')
 
 # Define task dependencies
-download_from_api_task >> write_parquet_to_disk_task >> ready
+download_cbsa_info_from_api_task >> write_cbsa_codes_to_disk_task >> ready
+download_cbsa_info_from_api_task >> get_monitors_by_cbsa_task >> ready
