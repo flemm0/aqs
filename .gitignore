@@ -157,6 +157,11 @@ cython_debug/
 # Airflow
 logs/
 !plugins/include
+variables.json
+airflow.cfg
+airflow.db
+webserver_config.py
+airflow-webserver.pid
 
 # test data folder
 data/
