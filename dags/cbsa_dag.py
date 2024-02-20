@@ -10,11 +10,12 @@ from tasks.monitors import get_monitors_by_cbsa
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
+    'start_date': datetime(2024, 2, 19),
+    #'end_date': datetime(2024, 1, 8),
     'email_on_failure': False,
     'email_on_retry': False,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
+    'retries': 0,
+    'retry_delay': timedelta(minutes=2),
 }
 
 dag = DAG(
@@ -25,20 +26,26 @@ dag = DAG(
 
 # Define DAG tasks
 download_cbsa_info_from_api_task = PythonOperator(
-    task_id='fetch_cbsa_codes_from_api',
+    task_id='download_cbsa_info_from_api_task',
     python_callable=get_cbsa_codes,
+    provide_context=True,
     dag=dag,
 )
 
 write_cbsa_codes_to_disk_task = PythonOperator(
-    task_id='write_cbsa_codes_parquet_data_to_disk',
+    task_id='write_cbsa_codes_to_disk_task',
     python_callable=write_cbsa_parquet_data,
+    # op_kwargs={'cbsa_data': "{{ ti.xcom_pull(task_ids='fetch_cbsa_codes_from_api') }}"},
+    provide_context=True,
     dag=dag,
 )
 
+date = "{{ ds_nodash }}"
 get_monitors_by_cbsa_task = PythonOperator(
     task_id='write_monitor_by_cbsa_data_to_disk',
     python_callable=get_monitors_by_cbsa,
+    provide_context=True,
+    op_kwargs={'date': date},
     dag=dag
 )
 
@@ -46,7 +53,7 @@ get_monitors_by_cbsa_task = PythonOperator(
 #     task_id="create_object",
 #     s3_bucket=bucket_name,
 #     s3_key=key,
-#     data=DATA,
+#     data=download_cbsa_info_from_api_task.output,
 #     replace=True,
 # )
 
