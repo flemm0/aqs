@@ -10,20 +10,15 @@ EMAIL = Variable.get('EMAIL')
 API_KEY = Variable.get('API_KEY')
 
 
-def get_monitors_by_cbsa(ti, date: str, **kwargs):
+
+def get_monitors_by_state(ti, date: str, **kwargs):
     '''Grabs monitor information by cbsa from AQS API for specified date'''
-    data = ti.xcom_pull(task_ids='download_cbsa_info_from_api_task', key='cbsa_data')
-    df = pl.DataFrame(data)
-    cbsa_codes = df.get_column('code').to_list()
+    data = ti.xcom_pull(task_ids='get_state_codes_from_api_task', key='state_codes')
+    state_codes = [val['code'] for val in data]
 
-    # Make monitor "bucket"
-    path = DATA_PATH / 'monitors'
-    if not path.exists():
-        path.mkdir(exist_ok=True)
-
-    checked = 0
-    for code in cbsa_codes:
-        url = f'https://aqs.epa.gov/data/api/monitors/byCBSA?email={EMAIL}&key={API_KEY}&param=42602&bdate={date}&edate={date}&cbsa={code}'
+    checked, data_list = 0, []
+    for code in state_codes:
+        url = f'https://aqs.epa.gov/data/api/monitors/byState?email={EMAIL}&key={API_KEY}&param=42602&bdate={date}&edate={date}&state={code}'
         response = requests.get(url)
 
         if response.status_code != 200:
@@ -31,10 +26,25 @@ def get_monitors_by_cbsa(ti, date: str, **kwargs):
         else: 
             data = response.json()['Data']
             if data:
-                df = pl.DataFrame(data, schema=monitor_json_schema)          
-                df.write_parquet(f'{DATA_PATH}/monitors/{code}_{date}.parquet')
+                data_list.extend(data)
             else:
-                print(f'No data for code: {code} on date: {date}')
+                print(f'No data for state code: {code} on date: {date}')
+
         # logging info
         checked += 1
-        print(f'Percent CBSAs checked: {checked // len(cbsa_codes)}%')
+        print(f'{checked} states checked out of {len(state_codes)}')
+
+    ti.xcom_push(key='monitor_data', value=data_list)
+
+
+def write_monitors_by_state_data_to_disk(ti, date: str, **kwargs):
+    '''Writes monitor information by cbsa to disk'''
+
+    # create monitors "bucket"
+    path = DATA_PATH / 'monitors'
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    data = ti.xcom_pull(task_ids='get_monitors_by_state_task', key='monitor_data')
+    df = pl.DataFrame(data, schema=monitor_json_schema)
+    df.write_parquet(f'{path}/{date}.parquet')
