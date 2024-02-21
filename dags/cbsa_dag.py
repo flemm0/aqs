@@ -41,8 +41,8 @@ write_cbsa_codes_to_disk_task = PythonOperator(
 )
 
 date = "{{ ds_nodash }}"
-get_monitors_by_cbsa_task = PythonOperator(
-    task_id='write_monitor_by_cbsa_data_to_disk',
+write_monitor_by_cbsa_data_to_disk_task = PythonOperator(
+    task_id='write_monitor_by_cbsa_data_to_disk_task',
     python_callable=get_monitors_by_cbsa,
     provide_context=True,
     op_kwargs={'date': date},
@@ -60,5 +60,4 @@ get_monitors_by_cbsa_task = PythonOperator(
 ready = EmptyOperator(task_id='ready')
 
 # Define task dependencies
-download_cbsa_info_from_api_task >> write_cbsa_codes_to_disk_task >> ready
-download_cbsa_info_from_api_task >> get_monitors_by_cbsa_task >> ready
+download_cbsa_info_from_api_task >> [write_cbsa_codes_to_disk_task, write_monitor_by_cbsa_data_to_disk_task] >> ready
