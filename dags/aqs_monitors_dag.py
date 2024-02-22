@@ -7,6 +7,7 @@ from airflow.utils.dates import days_ago
 
 from tasks.states import get_state_codes_from_api
 from tasks.monitors import get_monitors_by_state, write_monitors_by_state_data_to_disk
+from tasks.samples import get_sample_data_by_state, write_sample_data_to_disk
 
 default_args = {
     'owner': 'airflow',
@@ -55,13 +56,13 @@ get_monitors_by_state_task = PythonOperator(
     dag=dag
 )
 
-create_object = S3CreateObjectOperator(
-    task_id="create_object",
-    s3_bucket='monitors',
-    s3_key=date,
-    data=get_monitors_by_state_task.output,
-    replace=True,
-)
+# create_object = S3CreateObjectOperator(
+#     task_id="create_object",
+#     s3_bucket='monitors',
+#     s3_key=date,
+#     data=get_monitors_by_state_task.output,
+#     replace=True,
+# )
 
 write_monitors_by_state_data_to_disk_task = PythonOperator(
     task_id='write_monitors_by_state_data_to_disk_task',
@@ -71,8 +72,26 @@ write_monitors_by_state_data_to_disk_task = PythonOperator(
     dag=dag
 )
 
+get_sample_data_by_state_task = PythonOperator(
+    task_id='get_sample_data_by_state_task',
+    python_callable=get_sample_data_by_state,
+    provide_context=True,
+    op_kwargs={'date': date},
+    dag=dag
+)
+
+write_sample_data_to_disk_task = PythonOperator(
+    task_id='write_sample_data_to_disk_task',
+    python_callable=write_sample_data_to_disk,
+    provide_context=True,
+    op_kwargs={'date': date},
+    dag=dag
+)
+
 
 ready = EmptyOperator(task_id='ready')
 
+
 # Define task dependencies
 get_state_codes_from_api_task >> get_monitors_by_state_task >> write_monitors_by_state_data_to_disk_task >> ready
+get_state_codes_from_api_task >> get_sample_data_by_state_task >> write_sample_data_to_disk_task >> ready

@@ -1,8 +1,6 @@
 import requests
 import polars as pl
 
-from config.constants import DATA_PATH
-
 from airflow.models import Variable
 
 EMAIL = Variable.get('EMAIL')
