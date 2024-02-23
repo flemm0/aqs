@@ -73,3 +73,52 @@ sample_json_schema = {
     'date_of_last_change': Utf8,
     'cbsa_code': Utf8
 }
+
+hourly_data_file_schema = {
+    'valid_date': Utf8,
+    'valid_timme': Utf8,
+    'aqsid': Utf8,
+    'site_name': Utf8,
+    'gmt_offset': Utf8,
+    'parameter_name': Utf8,
+    'reporting_units': Utf8,
+    'value': Int64,
+    'data_source': Utf8
+}
+
+hourly_aqobs_file_schema = {
+    'AQSID': Utf8,
+    'SiteName': Utf8,
+    'Status': Utf8,
+    'EPARegion': Utf8,
+    'Latitude': Float64,
+    'Longitude': Float64,
+    'Elevation': Float64,
+    'GMTOffset': Int64,
+    'CountryCode': Utf8,
+    'StateName': Utf8,
+    'ValidDate': Utf8,
+    'ValidTime': Utf8,
+    'DataSource': Utf8,
+    'ReportingArea_PipeDelimited': Utf8,
+    'OZONE_AQI': Int64,
+    'PM10_AQI': Int64,
+    'PM25_AQI': Int64,
+    'NO2_AQI': Int64,
+    'Ozone_Measured': Int64,
+    'PM10_Measured': Int64,
+    'PM25_Measured': Int64,
+    'NO2_Measured': Int64,
+    'PM25': Float64,
+    'PM25_Unit': Utf8,
+    'OZONE': Float64,
+    'OZONE_Unit': Utf8,
+    'NO2': Float64,
+    'NO2_Unit': Utf8,
+    'CO': Float64,
+    'CO_Unit': Utf8,
+    'SO2': Float64,
+    'SO2_Unit': Utf8,
+    'PM10': Float64,
+    'PM10_Unit': Utf8
+}
