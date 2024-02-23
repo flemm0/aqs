@@ -9,6 +9,9 @@ from airflow.utils.dates import days_ago
 import requests
 from io import BytesIO
 
+from config.constants import DATA_PATH
+from config.schemas import hourly_aqobs_file_schema
+
 
 with DAG(
     'airnow_daily_data',
@@ -21,7 +24,6 @@ with DAG(
         # 'queue': 'bash_queue',
         # 'pool': 'backfill',
         # 'priority_weight': 10,
-        # 'end_date': datetime(2016, 1, 1),
         # 'wait_for_downstream': False,
         # 'sla': timedelta(hours=2),
         # 'execution_timeout': timedelta(seconds=300),
@@ -31,55 +33,41 @@ with DAG(
         # 'sla_miss_callback': yet_another_function, # or list of functions
         # 'trigger_rule': 'all_success'
     },
-    description='A simple tutorial DAG',
-    start_date=days_ago(3), #data is updated continuously for 48 hours after posting
-    schedule_interval='@daily',
+    description='Extracts hourly-updated air quality measurements from Airnow API every day',
+    start_date=days_ago(4), #data is updated continuously for 48 hours after posting
+    end_date=days_ago(4, hour=23),
+    schedule_interval='0 0 * * *', # daily at midnight
     catchup=False,
     tags=['airnow'],
 ) as dag:
-    
-    def extract_daily_monitor_data(date: str):
+
+    def extract_aqobs_daily_data(date: str):
         import polars as pl
 
+        data = []
         for num in ["{:02d}".format(i) for i in range(0, 24)]:
-            url = f'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{date[:4]}/{date}/HourlyData_{date}{num}.dat'
+            url = f'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{date[:4]}/{date}/HourlyAQObs_{date}{num}.dat'
+            print(f'Extracting file: HourlyAQObs_{date}{num}.dat')
             response = requests.get(url)
-            df = pl.read_csv(BytesIO(response.content), separator='|', ignore_errors=True)
-            print(df)
+            df = pl.read_csv(BytesIO(response.content), ignore_errors=True, schema=hourly_aqobs_file_schema)
+            data.extend(df.to_dicts())
+        
+        df = pl.DataFrame(data, schema=hourly_aqobs_file_schema)
 
-    extract_daily_monitor_data_task = PythonOperator(
-        task_id='extract_daily_monitor_data_task',
-        python_callable=extract_daily_monitor_data,
-        op_kwargs={'date': "{{ macros.ds_format(macros.ds_add(ds, -1), '%Y-%m-%d', '%Y%m%d') }}"},
+        path = DATA_PATH / 'hourly_data' / date[:4]
+        if not path.exists():
+            path.mkdir(parents=True, exist_ok=True)
+
+        df.write_parquet(f'{path}/{date}.parquet')
+        
+
+    extract_aqobs_daily_data_task = PythonOperator(
+        task_id='extract_aqobs_daily_data_task',
+        python_callable=extract_aqobs_daily_data,
+        op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
         provide_context=True
     )
 
     ready = EmptyOperator(task_id='ready')
 
-    extract_daily_monitor_data_task >> ready
-
-    # download_from_server_file_storage_task = BashOperator(
-    #     task_id='download_from_server_file_storage_task',
-    #     bash_command='''
-    #     curl -o - 'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{{ ds_nodash[:4] }}/{{ ds_nodash }}/HourlyData_{{ ds_nodash }}00.dat'
-    #     '''.strip(),
-    #     xcom_push=True
-    # )
-
-    # def write_hourly_monitor_data_to_disk(**kwargs):
-    #     import polars as pl
-
-    #     ti = kwargs['ti']
-    #     data = ti.xcom_pull(task_ids='download_from_server_file_storage_task')
-
-    #     print(data)
-    #     # df = pl.read_csv(data, separator='|')
-    #     # print(df)
-
-    # write_hourly_monitor_data_to_disk_task = PythonOperator(
-    #     task_id='write_hourly_monitor_data_to_disk_task',
-    #     python_callable=write_hourly_monitor_data_to_disk,
-    #     provide_context=True
-    # )
-
-    # download_from_server_file_storage_task >> write_hourly_monitor_data_to_disk_task
+    extract_aqobs_daily_data_task >> ready
