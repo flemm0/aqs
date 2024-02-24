@@ -122,3 +122,45 @@ hourly_aqobs_file_schema = {
     'PM10': Float64,
     'PM10_Unit': Utf8
 }
+
+reporting_area_locations_v2_schema = {
+    'reporting_area': Utf8,
+    'state_code': Utf8,
+    'country_code': Utf8,
+    'forecasts': Utf8,
+    'action_day_name': Utf8,
+    'latitude': Float64,
+    'longitude': Float64,
+    'gmt_offset': Int64,
+    'daylight_savings': Utf8,
+    'standard_time_zone_label': Utf8,
+    'daylight_savings_time_zone_label': Utf8,
+    'twc_code': Utf8,
+    'usa_today': Utf8,
+    'forecast_source': Utf8
+}
+
+monitoring_site_location_v2_schema = {
+    'StationID': Utf8,
+    'AQSID': Utf8,
+    'FullAQSID': Utf8,
+    'Parameter': Utf8,
+    'MonitorType': Utf8,
+    'SiteCode': Int64,
+    'SiteName': Utf8,
+    'Status': Utf8,
+    'AgencyID': Utf8,
+    'AgencyName': Utf8,
+    'EPARegion': Utf8,
+    'Latitude': Float64,
+    'Longitude': Float64,
+    'Elevation': Float64,
+    'GMTOffset': Int64,
+    'CountryFIPS': Utf8,
+    'CBSA_ID': Utf8,
+    'CBSA_Name': Utf8,
+    'StateAQSCode': Int64,
+    'StateAbbreviation': Utf8,
+    'CountryAQSCode': Int64,
+    'CountryName': Utf8
+}
