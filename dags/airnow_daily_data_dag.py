@@ -5,13 +5,9 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.amazon.aws.operators.s3 import S3CreateObjectOperator
 from airflow.utils.dates import days_ago
+from airflow.models import Variable
 
-import requests
-from io import BytesIO
-
-from config.constants import DATA_PATH
-from config.schemas import hourly_aqobs_file_schema
-
+from tasks.airnow import *
 
 with DAG(
     'airnow_daily_data',
@@ -19,7 +15,7 @@ with DAG(
         'depends_on_past': False,
         'email_on_failure': False,
         'email_on_retry': False,
-        'retries': 0,
+        'retries': 1,
         'retry_delay': timedelta(minutes=5),
         # 'queue': 'bash_queue',
         # 'pool': 'backfill',
@@ -34,32 +30,14 @@ with DAG(
         # 'trigger_rule': 'all_success'
     },
     description='Extracts hourly-updated air quality measurements from Airnow API every day',
-    start_date=days_ago(4), #data is updated continuously for 48 hours after posting
+    start_date=days_ago(4), # data is updated continuously for 48 hours after posting
+    # start_date=days_ago(30), # backfill starting from 30 days ago
     end_date=days_ago(4, hour=23),
     schedule_interval='0 0 * * *', # daily at midnight
-    catchup=False,
     tags=['airnow'],
+    max_active_runs=1, # prevent OOM issues when hosted on local
+    catchup=True
 ) as dag:
-
-    def extract_aqobs_daily_data(date: str):
-        import polars as pl
-
-        data = []
-        for num in ["{:02d}".format(i) for i in range(0, 24)]:
-            url = f'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{date[:4]}/{date}/HourlyAQObs_{date}{num}.dat'
-            print(f'Extracting file: HourlyAQObs_{date}{num}.dat')
-            response = requests.get(url)
-            df = pl.read_csv(BytesIO(response.content), ignore_errors=True, schema=hourly_aqobs_file_schema)
-            data.extend(df.to_dicts())
-        
-        df = pl.DataFrame(data, schema=hourly_aqobs_file_schema)
-
-        path = DATA_PATH / 'hourly_data' / date[:4]
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
-
-        df.write_parquet(f'{path}/{date}.parquet')
-        
 
     extract_aqobs_daily_data_task = PythonOperator(
         task_id='extract_aqobs_daily_data_task',
@@ -68,6 +46,62 @@ with DAG(
         provide_context=True
     )
 
+    write_daily_aqobs_data_to_s3_task = PythonOperator(
+        python_callable=write_daily_aqobs_data_to_s3,
+        task_id='write_daily_aqobs_data_to_s3_task',
+        provide_context=True
+    )
+
+    cleanup_local_hourly_data_files_task = PythonOperator(
+        task_id='cleanup_local_hourly_data_files_task',
+        python_callable=cleanup_local_hourly_data_files,
+        provide_context=True
+    )
+
+    extract_reporting_area_locations_task = PythonOperator(
+        task_id='extract_reporting_area_locations_task',
+        python_callable=extract_reporting_area_locations,
+        op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
+        provide_context=True
+    )
+
+    write_reporting_area_locations_to_s3_task = PythonOperator(
+        python_callable=write_reporting_area_locations_to_s3,
+        task_id='write_reporting_area_locations_to_s3_task',
+        provide_context=True
+    )
+
+    cleanup_reporting_area_location_files_task = PythonOperator(
+        task_id='cleanup_reporting_area_location_files_task',
+        python_callable=cleanup_reporting_area_location_files,
+        provide_context=True
+    )
+
+    extract_monitoring_site_locations_task = PythonOperator(
+        task_id='extract_monitoring_site_locations_task',
+        python_callable=extract_monitoring_site_locations,
+        op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
+        provide_context=True
+    )
+
+    write_monitoring_site_locations_to_s3_task = PythonOperator(
+        python_callable=write_monitoring_site_locations_to_s3,
+        task_id='write_monitoring_site_locations_to_s3_task',
+        provide_context=True
+    )
+
+    cleanup_monitoring_site_location_files_task = PythonOperator(
+        task_id='cleanup_monitoring_site_location_files_task',
+        python_callable=cleanup_monitoring_site_location_files,
+        provide_context=True
+    )
+
+
+
     ready = EmptyOperator(task_id='ready')
 
-    extract_aqobs_daily_data_task >> ready
+
+    
+    extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> cleanup_local_hourly_data_files_task 
+    cleanup_local_hourly_data_files_task >> extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> cleanup_reporting_area_location_files_task >> ready
+    cleanup_local_hourly_data_files_task >> extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> cleanup_monitoring_site_location_files_task >> ready
