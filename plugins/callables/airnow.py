@@ -7,7 +7,7 @@ import os
 import boto3
 from botocore.exceptions import NoCredentialsError
 
-from dags.config.schemas import hourly_aqobs_file_schema, reporting_area_locations_v2_schema, monitoring_site_location_v2_schema
+from config.schemas import hourly_aqobs_file_schema, reporting_area_locations_v2_schema, monitoring_site_location_v2_schema
 from config.constants import DATA_PATH
 
 
