@@ -17,7 +17,13 @@ import requests
 import os
 
 # A DAG represents a workflow, a collection of tasks
-with DAG(dag_id="testing_dag", start_date=days_ago(4), end_date=days_ago(4, hour=23), schedule="0 0 * * *") as dag:
+with DAG(
+    dag_id="testing_dag",
+    start_date=days_ago(0),
+    # start_date=days_ago(4),
+    # end_date=days_ago(4, hour=23),
+    schedule="0 0 * * *"
+) as dag:
 
     # Tasks are represented as operators
     hello = BashOperator(task_id="hello", bash_command="echo hello")

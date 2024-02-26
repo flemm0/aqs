@@ -7,7 +7,7 @@ import os
 import boto3
 from botocore.exceptions import NoCredentialsError
 
-from config.schemas import hourly_aqobs_file_schema, reporting_area_locations_v2_schema, monitoring_site_location_v2_schema
+from dags.config.schemas import hourly_aqobs_file_schema, reporting_area_locations_v2_schema, monitoring_site_location_v2_schema
 from config.constants import DATA_PATH
 
 
@@ -17,15 +17,15 @@ def extract_aqobs_daily_data(ti, date: str, **kwargs):
     '''Extracts and dumps HourlyAQObs data files'''
     import polars as pl
 
-    data, files_written = [], []
-    for num in ["{:02d}".format(i) for i in range(0, 24)]:
-        url = f'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{date[:4]}/{date}/HourlyAQObs_{date}{num}.dat'
-        print(f'Extracting file: HourlyAQObs_{date}{num}.dat')
+    data = []
+    for hour in ["{:02d}".format(i) for i in range(0, 24)]:
+        url = f'https://s3-us-west-1.amazonaws.com/files.airnowtech.org/airnow/{date[:4]}/{date}/HourlyAQObs_{date}{hour}.dat'
+        print(f'Extracting file: HourlyAQObs_{date}{hour}.dat')
         response = requests.get(url)
         df = pl.read_csv(BytesIO(response.content), ignore_errors=True, schema=hourly_aqobs_file_schema)
         data.extend(df.to_dicts())
     
-    df = pl.DataFrame(data, schema=hourly_aqobs_file_schema)
+    df = pl.DataFrame(data)
 
     path = DATA_PATH / 'hourly_data' / date[:4]
     if not path.exists():
