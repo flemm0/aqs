@@ -7,7 +7,7 @@ from airflow.providers.amazon.aws.operators.s3 import S3CreateObjectOperator
 from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
-from tasks.airnow import *
+from plugins.callables.airnow import *
 
 with DAG(
     'airnow_daily_data',

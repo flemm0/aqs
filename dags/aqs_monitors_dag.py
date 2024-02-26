@@ -5,9 +5,9 @@ from airflow.operators.empty import EmptyOperator
 from airflow.providers.amazon.aws.operators.s3 import S3CreateObjectOperator
 from airflow.utils.dates import days_ago
 
-from tasks.states import get_state_codes_from_api
-from tasks.monitors import get_monitors_by_state, write_monitors_by_state_data_to_disk
-from tasks.samples import get_sample_data_by_state, write_sample_data_to_disk
+from plugins.callables.states import get_state_codes_from_api
+from plugins.callables.monitors import get_monitors_by_state, write_monitors_by_state_data_to_disk
+from plugins.callables.samples import get_sample_data_by_state, write_sample_data_to_disk
 
 default_args = {
     'owner': 'airflow',
