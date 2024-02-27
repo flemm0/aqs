@@ -58,6 +58,8 @@ def write_daily_aqobs_data_to_s3(ti, **kwargs):
     except NoCredentialsError:
         print("Credentials not available")
 
+    ti.xcom_push(key='aqobs_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+
 def cleanup_local_hourly_data_files(ti, **kwargs):
     '''Cleanup files at data/hourly_data/ '''
     file_path = ti.xcom_pull(task_ids='extract_aqobs_daily_data_task', key='aqobs_data')

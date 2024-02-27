@@ -8,6 +8,7 @@ from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
 from plugins.callables.airnow import *
+from plugins.operators.s3 import S3ToMotherDuckOperator
 
 with DAG(
     'airnow_daily_data',
@@ -16,7 +17,7 @@ with DAG(
         'email_on_failure': False,
         'email_on_retry': False,
         'retries': 1,
-        'retry_delay': timedelta(minutes=5),
+        'retry_delay': timedelta(minutes=1),
         # 'queue': 'bash_queue',
         # 'pool': 'backfill',
         # 'priority_weight': 10,
@@ -50,6 +51,14 @@ with DAG(
         python_callable=write_daily_aqobs_data_to_s3,
         task_id='write_daily_aqobs_data_to_s3_task',
         provide_context=True
+    )
+
+    load_hourly_data_to_motherduck_task = S3ToMotherDuckOperator(
+        task_id='load_hourly_data_to_motherduck_task',
+        s3_bucket='airnow-aq-data-lake',
+        s3_key="{{ ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3') }}",
+        table='staging.stg_hourly_data',
+        dag=dag
     )
 
     cleanup_local_hourly_data_files_task = PythonOperator(
@@ -97,11 +106,10 @@ with DAG(
     )
 
 
-
-    ready = EmptyOperator(task_id='ready')
+    done = EmptyOperator(task_id='done')
 
 
     
-    extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> cleanup_local_hourly_data_files_task 
-    cleanup_local_hourly_data_files_task >> extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> cleanup_reporting_area_location_files_task >> ready
-    cleanup_local_hourly_data_files_task >> extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> cleanup_monitoring_site_location_files_task >> ready
+    extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_motherduck_task >> cleanup_local_hourly_data_files_task
+    cleanup_local_hourly_data_files_task >> extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> cleanup_reporting_area_location_files_task >> done
+    cleanup_local_hourly_data_files_task >> extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> cleanup_monitoring_site_location_files_task >> done
