@@ -56,7 +56,6 @@ with DAG(
     load_hourly_data_to_motherduck_task = S3ToMotherDuckInsertOperator(
         task_id='load_hourly_data_to_motherduck_task',
         s3_bucket='airnow-aq-data-lake',
-        s3_key="{{ ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3') }}",
         table='staging.stg_hourly_data',
         dag=dag
     )
@@ -83,9 +82,11 @@ with DAG(
     load_reporting_area_locations_new_data_to_motherduck_task = S3ToMotherDuckInsertNewRowsOperator(
         task_id='load_reporting_area_locations_new_data_to_motherduck_task',
         s3_bucket='airnow-aq-data-lake',
-        s3_key="{{ ti.xcom_pull(task_ids='write_reporting_area_locations_to_s3_task') }}",
+        prev_task_id='write_reporting_area_locations_to_s3_task',
+        xcom_key='reporting_areas_s3_object_path',
         table='staging.stg_reporting_areas',
-        temp_table='staging.temp_stg_reporting_areas'
+        temp_table='staging.temp_stg_reporting_areas',
+        dag=dag
     )
 
     cleanup_reporting_area_location_files_task = PythonOperator(
@@ -110,9 +111,11 @@ with DAG(
     load_monitoring_site_locations_new_data_to_motherduck_task = S3ToMotherDuckInsertNewRowsOperator(
         task_id='load_monitoring_site_locations_new_data_to_motherduck_task',
         s3_bucket='airnow-aq-data-lake',
-        s3_key="{{ ti.xcom_pull(task_ids='write_monitoring_site_locations_to_s3_task') }}",
+        prev_task_id='write_monitoring_site_locations_to_s3_task',
+        xcom_key='monitoring_sites_s3_object_path',
         table='staging.stg_monitoring_sites',
-        temp_table='staging.temp_stg_monitoring_sites'
+        temp_table='staging.temp_stg_monitoring_sites',
+        dag=dag
     )
 
     cleanup_monitoring_site_location_files_task = PythonOperator(

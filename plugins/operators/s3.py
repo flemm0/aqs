@@ -18,13 +18,11 @@ class S3ToMotherDuckInsertOperator(BaseOperator):
     def __init__(
         self,
         s3_bucket,
-        s3_key,
         table,
         *args, **kwargs
     ):
         super(S3ToMotherDuckInsertOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
-        self.s3_key = s3_key
         self.table = table
 
     def execute(self, context):
@@ -46,33 +44,37 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
     def __init__(
         self,
         s3_bucket,
-        s3_key,
+        prev_task_id,
+        xcom_key,
         temp_table,
         table,
         *args, **kwargs
     ):
         super(S3ToMotherDuckInsertNewRowsOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
-        self.s3_key = s3_key
+        self.prev_task_id = prev_task_id
+        self.xcom_key = xcom_key
         self.table = table
         self.temp_table = temp_table
 
     def execute(self, context):
         ti = context['ti']
-        s3_key = ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3_task', key='aqobs_s3_object_path')
+        s3_key = ti.xcom_pull(task_ids=self.prev_task_id, key=self.xcom_key)
+        print(s3_key)
         s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
 
         create_temp_table_query = f"""
             CREATE OR REPLACE TABLE {self.temp_table}
-            AS ( SELECT * FROM '{s3_object}' );
+            AS ( SELECT *, 'yes' AS is_current FROM '{s3_object}' );
         """
+        print(f'Executing query: {create_temp_table_query}')
         conn.execute(create_temp_table_query)
 
         table_update_query = f"""
             CREATE OR REPLACE TABLE {self.table} AS (
                 WITH new_rows AS (
-                    SELECT *, 'yes' AS is_current
+                    SELECT *
                     FROM {self.temp_table}
                     WHERE NOT EXISTS ( SELECT * EXCLUDE(is_current) FROM {self.table} )
                 ), 
@@ -98,11 +100,13 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
                 SELECT * FROM updated_table
             );
         """
+        print(f'Executing query: {table_update_query}')
         conn.execute(table_update_query)
 
         drop_temp_table_query = f"""
             DROP TABLE IF EXISTS {self.temp_table}
         """
+        print(f'Executing query: {drop_temp_table_query}')
         conn.execute(drop_temp_table_query)
 
 
@@ -170,3 +174,12 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
 #     with redshift_hook.get_conn() as conn:
 #         with conn.cursor() as cursor:
 #             cursor.execute(upsert_query)
+        
+# import redshift_connector
+# conn = redshift_connector.connect(
+#     host='examplecluster.abc123xyz789.us-west-1.redshift.amazonaws.com',
+#     port=5439,
+#     database='dev',
+#     user='awsuser',
+#     password='my_password'
+#  )

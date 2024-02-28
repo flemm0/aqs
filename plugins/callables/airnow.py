@@ -50,6 +50,8 @@ def write_daily_aqobs_data_to_s3(ti, **kwargs):
 
     bucket_name = "airnow-aq-data-lake"
 
+    print(f"Writing S3 file: {bucket_name}/{'/'.join(file_path.split('/')[1:])}")
+
     try:
         s3_client.upload_file(file_path, bucket_name, '/'.join(file_path.split('/')[1:]))
         print("Upload Successful")
@@ -106,6 +108,8 @@ def write_reporting_area_locations_to_s3(ti, **kwargs):
 
     bucket_name = "airnow-aq-data-lake"
 
+    print(f"Writing S3 file: {bucket_name}/{'/'.join(file_path.split('/')[1:])}")
+
     try:
         s3_client.upload_file(file_path, bucket_name, '/'.join(file_path.split('/')[1:]))
         print("Upload Successful")
@@ -161,6 +165,8 @@ def write_monitoring_site_locations_to_s3(ti, **kwargs):
     )
 
     bucket_name = "airnow-aq-data-lake"
+
+    print(f"Writing S3 file: {bucket_name}/{'/'.join(file_path.split('/')[1:])}")
 
     try:
         s3_client.upload_file(file_path, bucket_name, '/'.join(file_path.split('/')[1:]))
