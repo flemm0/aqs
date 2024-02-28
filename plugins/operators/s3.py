@@ -10,7 +10,7 @@ import duckdb
 
 motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
 
-class S3ToMotherDuckOperator(BaseOperator):
+class S3ToMotherDuckInsertOperator(BaseOperator):
     """
     Operator to copy data from s3 parquet file into MotherDuck
     """
@@ -19,14 +19,12 @@ class S3ToMotherDuckOperator(BaseOperator):
         self,
         s3_bucket,
         s3_key,
-        # motherduck_token,
         table,
         *args, **kwargs
     ):
-        super(S3ToMotherDuckOperator, self).__init__(*args, **kwargs)
+        super(S3ToMotherDuckInsertOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
         self.s3_key = s3_key
-        # self.motherduck_token = motherduck_token
         self.table = table
 
     def execute(self, context):
@@ -40,43 +38,135 @@ class S3ToMotherDuckOperator(BaseOperator):
         """
         conn.execute(insert_query)
 
+class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
+    """
+    Operator to copy data from s3 parquet file into MotherDuck
+    """
+    @apply_defaults
+    def __init__(
+        self,
+        s3_bucket,
+        s3_key,
+        temp_table,
+        table,
+        *args, **kwargs
+    ):
+        super(S3ToMotherDuckInsertNewRowsOperator, self).__init__(*args, **kwargs)
+        self.s3_bucket = s3_bucket
+        self.s3_key = s3_key
+        self.table = table
+        self.temp_table = temp_table
+
+    def execute(self, context):
+        ti = context['ti']
+        s3_key = ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3_task', key='aqobs_s3_object_path')
+        s3_object = f's3://{self.s3_bucket}/{s3_key}'
+        conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
+
+        create_temp_table_query = f"""
+            CREATE OR REPLACE TABLE {self.temp_table}
+            AS ( SELECT * FROM '{s3_object}' );
+        """
+        conn.execute(create_temp_table_query)
+
+        table_update_query = f"""
+            CREATE OR REPLACE TABLE {self.table} AS (
+                WITH new_rows AS (
+                    SELECT *, 'yes' AS is_current
+                    FROM {self.temp_table}
+                    WHERE NOT EXISTS ( SELECT * EXCLUDE(is_current) FROM {self.table} )
+                ), 
+                existing_table_no_current_status AS (
+                    SELECT * EXCLUDE(is_current) 
+                    FROM {self.table}
+                ), 
+                existing_table_status_updated AS (
+                    SELECT 
+                        *, 
+                        CASE
+                            WHEN EXISTS ( SELECT * FROM new_rows )
+                            THEN 'no'
+                            ELSE 'yes'
+                        END AS is_current
+                    FROM existing_table_no_current_status
+                ), 
+                updated_table AS (
+                    SELECT * FROM existing_table_status_updated
+                    UNION
+                    SELECT * FROM new_rows
+                )
+                SELECT * FROM updated_table
+            );
+        """
+        conn.execute(table_update_query)
+
+        drop_temp_table_query = f"""
+            DROP TABLE IF EXISTS {self.temp_table}
+        """
+        conn.execute(drop_temp_table_query)
 
 
-# class S3ToRedshiftOperator(BaseOperator):
-#     """
-#     Operator to copy data from Parquet files in S3 to Redshift staging table.
-#     """
 
+# class S3ToRedshiftInsertNewRowsOperator(BaseOperator):
+#     '''
+#     Operator to insert new rows from S3 bucket files into Redshift staging table
+#     '''
 #     @apply_defaults
-#     def __init__(
-#         self,
-#         s3_bucket,
-#         s3_key,
-#         redshift_conn_id,
-#         table,
-#         copy_options='',
-#         *args, **kwargs
-#     ):
-#         super(S3ToRedshiftOperator, self).__init__(*args, **kwargs)
+#     def __init__(self,
+#                  s3_bucket,
+#                  s3_key,
+#                  redshift_conn_id,
+#                  redshift_table,
+#                  primary_key,
+#                  *args, **kwargs):
+#         super(S3ToRedshiftInsertNewRowsOperator, self).__init__(*args, **kwargs)
 #         self.s3_bucket = s3_bucket
 #         self.s3_key = s3_key
 #         self.redshift_conn_id = redshift_conn_id
-#         self.table = table
-#         self.copy_options = copy_options
+#         self.redshift_table = redshift_table
+#         self.primary_key = primary_key
 
-#     def execute(self, context):
-#         aws_hook = AwsHook()
-#         credentials = aws_hook.get_credentials()
-#         redshift_hook = PostgresHook(postgres_conn_id=self.redshift_conn_id)
+# def execute(self, context):
+#     # Initialize S3 and Redshift connections
+#     s3_hook = S3Hook()
+#     redshift_hook = PostgresHook(postgres_conn_id=self.redshift_conn_id)
 
-#         s3_path = f's3://{self.s3_bucket}/{self.s3_key}'
-#         copy_query = f"""
-#             COPY {self.table}
-#             FROM '{s3_path}'
-#             CREDENTIALS 'aws_access_key_id={credentials.access_key};aws_secret_access_key={credentials.secret_key}'
-#             FORMAT AS PARQUET
-#             {self.copy_options}
-#         """
+#     # Load data from S3
+#     s3_object = s3_hook.get_key(self.s3_key, bucket_name=self.s3_bucket)
+#     if s3_object is None:
+#         raise ValueError(f"S3 object '{self.s3_key}' not found in bucket '{self.s3_bucket}'")
 
-#         self.log.info(f'Copying data from {s3_path} to Redshift table {self.table}')
-#         redshift_hook.run(copy_query)
+#     # Load data from S3 into a temporary staging table
+#     with redshift_hook.get_conn() as conn:
+#         with conn.cursor() as cursor:
+#             copy_query = f"""
+#                 COPY temp_staging_table
+#                 FROM 's3://{self.s3_bucket}/{self.s3_key}'
+#                 IAM_ROLE 'arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_REDSHIFT_ROLE'
+#                 DELIMITER ',' IGNOREHEADER 1;
+#             """
+#             cursor.execute(copy_query)
+
+#     # Perform upsert operation
+#     upsert_query = f"""
+#         INSERT INTO {self.redshift_table}
+#         SELECT *
+#         FROM temp_staging_table
+#         WHERE NOT EXISTS (
+#             SELECT 1
+#             FROM {self.redshift_table}
+#             WHERE {self.primary_key} = temp_staging_table.{self.primary_key}
+#         );
+
+#         UPDATE {self.redshift_table}
+#         SET col1 = temp_staging_table.col1,
+#             col2 = temp_staging_table.col2,
+#             ...
+#         FROM temp_staging_table
+#         WHERE {self.redshift_table}.{self.primary_key} = temp_staging_table.{self.primary_key};
+
+#         DROP TABLE IF EXISTS temp_staging_table;
+#     """
+#     with redshift_hook.get_conn() as conn:
+#         with conn.cursor() as cursor:
+#             cursor.execute(upsert_query)

@@ -8,7 +8,7 @@ from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
 from plugins.callables.airnow import *
-from plugins.operators.s3 import S3ToMotherDuckOperator
+from plugins.operators.s3 import S3ToMotherDuckInsertOperator, S3ToMotherDuckInsertNewRowsOperator
 
 with DAG(
     'airnow_daily_data',
@@ -53,7 +53,7 @@ with DAG(
         provide_context=True
     )
 
-    load_hourly_data_to_motherduck_task = S3ToMotherDuckOperator(
+    load_hourly_data_to_motherduck_task = S3ToMotherDuckInsertOperator(
         task_id='load_hourly_data_to_motherduck_task',
         s3_bucket='airnow-aq-data-lake',
         s3_key="{{ ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3') }}",
@@ -80,6 +80,14 @@ with DAG(
         provide_context=True
     )
 
+    load_reporting_area_locations_new_data_to_motherduck_task = S3ToMotherDuckInsertNewRowsOperator(
+        task_id='load_reporting_area_locations_new_data_to_motherduck_task',
+        s3_bucket='airnow-aq-data-lake',
+        s3_key="{{ ti.xcom_pull(task_ids='write_reporting_area_locations_to_s3_task') }}",
+        table='staging.stg_reporting_areas',
+        temp_table='staging.temp_stg_reporting_areas'
+    )
+
     cleanup_reporting_area_location_files_task = PythonOperator(
         task_id='cleanup_reporting_area_location_files_task',
         python_callable=cleanup_reporting_area_location_files,
@@ -99,6 +107,14 @@ with DAG(
         provide_context=True
     )
 
+    load_monitoring_site_locations_new_data_to_motherduck_task = S3ToMotherDuckInsertNewRowsOperator(
+        task_id='load_monitoring_site_locations_new_data_to_motherduck_task',
+        s3_bucket='airnow-aq-data-lake',
+        s3_key="{{ ti.xcom_pull(task_ids='write_monitoring_site_locations_to_s3_task') }}",
+        table='staging.stg_monitoring_sites',
+        temp_table='staging.temp_stg_monitoring_sites'
+    )
+
     cleanup_monitoring_site_location_files_task = PythonOperator(
         task_id='cleanup_monitoring_site_location_files_task',
         python_callable=cleanup_monitoring_site_location_files,
@@ -111,5 +127,7 @@ with DAG(
 
     
     extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_motherduck_task >> cleanup_local_hourly_data_files_task
-    cleanup_local_hourly_data_files_task >> extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> cleanup_reporting_area_location_files_task >> done
-    cleanup_local_hourly_data_files_task >> extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> cleanup_monitoring_site_location_files_task >> done
+    cleanup_local_hourly_data_files_task >> [extract_reporting_area_locations_task, extract_monitoring_site_locations_task]
+    extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> load_monitoring_site_locations_new_data_to_motherduck_task >> cleanup_monitoring_site_location_files_task
+    write_reporting_area_locations_to_s3_task >> load_reporting_area_locations_new_data_to_motherduck_task >> load_reporting_area_locations_new_data_to_motherduck_task >> cleanup_reporting_area_location_files_task
+    [cleanup_monitoring_site_location_files_task, cleanup_reporting_area_location_files_task] >> done

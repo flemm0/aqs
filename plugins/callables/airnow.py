@@ -114,6 +114,8 @@ def write_reporting_area_locations_to_s3(ti, **kwargs):
     except NoCredentialsError:
         print("Credentials not available")
 
+    ti.xcom_push(key='reporting_areas_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+
 def cleanup_reporting_area_location_files(ti, **kwargs):
     '''Cleanup files at data/reporting_areas/ '''
     file_path = ti.xcom_pull(task_ids='extract_reporting_area_locations_task', key='reporting_area_locations')
@@ -167,6 +169,8 @@ def write_monitoring_site_locations_to_s3(ti, **kwargs):
         print("The file was not found")
     except NoCredentialsError:
         print("Credentials not available")
+
+    ti.xcom_push(key='monitoring_sites_s3_object_path', value='/'.join(file_path.split('/')[1:]))
 
 def cleanup_monitoring_site_location_files(ti, **kwargs):
     '''Cleanup files at data/moinitoring_sites/ '''
