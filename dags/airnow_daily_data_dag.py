@@ -129,5 +129,5 @@ with DAG(
     extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_motherduck_task >> cleanup_local_hourly_data_files_task
     cleanup_local_hourly_data_files_task >> [extract_reporting_area_locations_task, extract_monitoring_site_locations_task]
     extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> load_monitoring_site_locations_new_data_to_motherduck_task >> cleanup_monitoring_site_location_files_task
-    write_reporting_area_locations_to_s3_task >> load_reporting_area_locations_new_data_to_motherduck_task >> load_reporting_area_locations_new_data_to_motherduck_task >> cleanup_reporting_area_location_files_task
+    extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> load_reporting_area_locations_new_data_to_motherduck_task >> cleanup_reporting_area_location_files_task
     [cleanup_monitoring_site_location_files_task, cleanup_reporting_area_location_files_task] >> done
