@@ -32,13 +32,12 @@ with DAG(
         # 'trigger_rule': 'all_success'
     },
     description='Extracts hourly-updated air quality measurements from Airnow API every day',
-    start_date=days_ago(4), # data is updated continuously for 48 hours after posting
-    # start_date=datetime(2024, 2, 10), # backfill starting from Jan 1, 2024
-    # start_date=datetime(2024, 1, 1)
+    # start_date=days_ago(4), # data is updated continuously for 48 hours after posting
+    start_date=datetime(2024, 1, 1),  # backfill starting from Jan 1, 2024
     end_date=days_ago(4, hour=23),
     schedule_interval='0 0 * * *', # daily at midnight
     tags=['airnow'],
-    max_active_runs=1, # prevent OOM issues when hosted on local
+    max_active_runs=1, # prevent OOM issues when Docker container hosted on local
     catchup=True
 ) as dag:
 
