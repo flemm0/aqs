@@ -27,7 +27,7 @@ class S3ToMotherDuckInsertOperator(BaseOperator):
 
     def execute(self, context):
         ti = context['ti']
-        s3_key = ti.xcom_pull(task_ids='write_daily_aqobs_data_to_s3_task', key='aqobs_s3_object_path')
+        s3_key = ti.xcom_pull(task_ids='hourly_data_task_group.write_daily_aqobs_data_to_s3_task', key='aqobs_s3_object_path')
         s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
         insert_query = f"""
@@ -44,6 +44,7 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
     def __init__(
         self,
         s3_bucket,
+        tg,
         prev_task_id,
         xcom_key,
         temp_table,
@@ -52,6 +53,7 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
     ):
         super(S3ToMotherDuckInsertNewRowsOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
+        self.tg = tg
         self.prev_task_id = prev_task_id
         self.xcom_key = xcom_key
         self.table = table
@@ -59,7 +61,7 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
 
     def execute(self, context):
         ti = context['ti']
-        s3_key = ti.xcom_pull(task_ids=self.prev_task_id, key=self.xcom_key)
+        s3_key = ti.xcom_pull(task_ids=f'{self.tg}.{self.prev_task_id}', key=self.xcom_key)
         print(s3_key)
         s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
@@ -74,7 +76,10 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
         table_update_query = f"""
             INSERT INTO {self.table}
             SELECT *, current_date AS ValidDate
-            FROM {self.temp_table};
+            FROM {self.temp_table}
+            WHERE NOT EXISTS (
+                SELECT * EXCLUDE (ValidDate) FROM {self.table}
+            );
         """
         print(f'Executing query: {table_update_query}')
         conn.execute(table_update_query)

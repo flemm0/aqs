@@ -14,7 +14,7 @@ from config.constants import DATA_PATH
 
 ################# HourlyAQObs Data Callables #################
 
-def extract_aqobs_daily_data(ti, date: str, **kwargs):
+def extract_aqobs_daily_data(date: str, **kwargs):
     '''Extracts and dumps HourlyAQObs data files'''
     import polars as pl
 
@@ -32,16 +32,18 @@ def extract_aqobs_daily_data(ti, date: str, **kwargs):
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
     
-    df.write_parquet(f'{path}/{date}.parquet')
+    file_path = f'{path}/{date}.parquet'
+    df.write_parquet(file=file_path)
     
-    ti.xcom_push(key='aqobs_data', value=f'{path}/{date}.parquet')
+    kwargs['ti'].xcom_push(key='aqobs_data', value=file_path)
 
-def write_daily_aqobs_data_to_s3(ti, **kwargs):
+
+def write_daily_aqobs_data_to_s3(**kwargs):
     '''Writes HourlyAQObs data files to s3 bucket'''
     aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
 
-    file_path = ti.xcom_pull(task_ids='extract_aqobs_daily_data_task', key='aqobs_data')
+    file_path = kwargs['ti'].xcom_pull(task_ids='hourly_data_task_group.extract_aqobs_daily_data_task', key='aqobs_data')
 
     s3_client = boto3.client(
         "s3",
@@ -61,17 +63,13 @@ def write_daily_aqobs_data_to_s3(ti, **kwargs):
     except NoCredentialsError:
         print("Credentials not available")
 
-    ti.xcom_push(key='aqobs_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+    kwargs['ti'].xcom_push(key='aqobs_s3_object_path', value='/'.join(file_path.split('/')[1:]))
 
-def cleanup_local_hourly_data_files(ti, **kwargs):
-    '''Cleanup files at data/hourly_data/ '''
-    file_path = ti.xcom_pull(task_ids='extract_aqobs_daily_data_task', key='aqobs_data')
-    os.remove(file_path)
 
 
 ################# Reporting Area Locations Callables #################
 
-def extract_reporting_area_locations(ti, date: str, **kwargs):
+def extract_reporting_area_locations(date: str, **kwargs):
     '''Extracts data files provided on the reporting areas'''
     import polars as pl
 
@@ -92,14 +90,14 @@ def extract_reporting_area_locations(ti, date: str, **kwargs):
 
     df.write_parquet(f'{path}/{date}.parquet')
 
-    ti.xcom_push(key='reporting_area_locations', value=f'{path}/{date}.parquet')
+    kwargs['ti'].xcom_push(key='reporting_area_locations', value=f'{path}/{date}.parquet')
 
-def write_reporting_area_locations_to_s3(ti, **kwargs):
+def write_reporting_area_locations_to_s3(**kwargs):
     '''Writes reporting area locations data files to s3 bucket'''
     aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
 
-    file_path = ti.xcom_pull(task_ids='extract_reporting_area_locations_task', key='reporting_area_locations')
+    file_path = kwargs['ti'].xcom_pull(task_ids='reporting_areas_task_group.extract_reporting_area_locations_task', key='reporting_area_locations')
 
     s3_client = boto3.client(
         "s3",
@@ -119,17 +117,13 @@ def write_reporting_area_locations_to_s3(ti, **kwargs):
     except NoCredentialsError:
         print("Credentials not available")
 
-    ti.xcom_push(key='reporting_areas_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+    kwargs['ti'].xcom_push(key='reporting_areas_s3_object_path', value='/'.join(file_path.split('/')[1:]))
 
-def cleanup_reporting_area_location_files(ti, **kwargs):
-    '''Cleanup files at data/reporting_areas/ '''
-    file_path = ti.xcom_pull(task_ids='extract_reporting_area_locations_task', key='reporting_area_locations')
-    os.remove(file_path)
 
 
 ################# Monitoring Site Locations Callables #################
     
-def extract_monitoring_site_locations(ti, date: str, **kwargs):
+def extract_monitoring_site_locations(date: str, **kwargs):
     '''Extracts data files provided on monitorinig sites'''
     import polars as pl
 
@@ -150,14 +144,14 @@ def extract_monitoring_site_locations(ti, date: str, **kwargs):
 
     df.write_parquet(f'{path}/{date}.parquet')
 
-    ti.xcom_push(key='monitoring_site_locations', value=f'{path}/{date}.parquet')
+    kwargs['ti'].xcom_push(key='monitoring_site_locations', value=f'{path}/{date}.parquet')
 
-def write_monitoring_site_locations_to_s3(ti, **kwargs):
+def write_monitoring_site_locations_to_s3(**kwargs):
     '''Writes monitoring site locations data files to s3 bucket'''
     aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
     aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
 
-    file_path = ti.xcom_pull(task_ids='extract_monitoring_site_locations_task', key='monitoring_site_locations')
+    file_path = kwargs['ti'].xcom_pull(task_ids='monitoring_sites_task_group.extract_monitoring_site_locations_task', key='monitoring_site_locations')
 
     s3_client = boto3.client(
         "s3",
@@ -177,12 +171,65 @@ def write_monitoring_site_locations_to_s3(ti, **kwargs):
     except NoCredentialsError:
         print("Credentials not available")
 
-    ti.xcom_push(key='monitoring_sites_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+    kwargs['ti'].xcom_push(key='monitoring_sites_s3_object_path', value='/'.join(file_path.split('/')[1:]))
 
-def cleanup_monitoring_site_location_files(ti, **kwargs):
-    '''Cleanup files at data/moinitoring_sites/ '''
-    file_path = ti.xcom_pull(task_ids='extract_monitoring_site_locations_task', key='monitoring_site_locations')
-    os.remove(file_path)
+
+
+################# Monitoring Sites to Reporting Areas Callables #################
+
+def extract_monitoring_sites_to_reporting_areas(date: str, **kwargs):
+    '''Extracts data files mapping monitoring sites to reporting areas'''
+    import polars as pl
+
+    url = f'https://s3-us-west-1.amazonaws.com//files.airnowtech.org/airnow/{date[:4]}/{date}/Site_To_ReportingArea.csv'
+    print(f'Extracting file: Site_To_ReportingArea.csv')
+    response = requests.get(url)
+
+    df = pl.read_csv(
+        BytesIO(response.content),
+        ignore_errors=True,
+    )
+
+    df = df.select(['ReportingAreaName', 'ReportingAreaID', 'SiteID', 'SiteName', 'SiteAgencyName'])
+
+    path = DATA_PATH / 'monitoring_sites_to_reporting_areas' / date[:4]
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+    df.write_parquet(f'{path}/{date}.parquet')
+
+    kwargs['ti'].xcom_push(key='monitoring_sites_to_reporting_areas', value=f'{path}/{date}.parquet')
+
+def write_monitoring_sites_to_reporting_areas_to_s3(**kwargs):
+    '''Writes monitoring site to reporting areas mapping to s3 bucket'''
+    aws_access_key_id = Variable.get('AWS_ACCESS_KEY_ID')
+    aws_secret_access_key = Variable.get('AWS_SECRET_ACCESS_KEY')
+
+    file_path = kwargs['ti'].xcom_pull(
+        task_ids='monitoring_sites_to_reporting_areas_task_group.extract_monitoring_sites_to_reporting_areas_task', 
+        key='monitoring_sites_to_reporting_areas'
+    )
+
+    s3_client = boto3.client(
+        "s3",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+    )
+
+    bucket_name = "airnow-aq-data-lake"
+
+    print(f"Writing S3 file: {bucket_name}/{'/'.join(file_path.split('/')[1:])}")
+
+    try:
+        s3_client.upload_file(file_path, bucket_name, '/'.join(file_path.split('/')[1:]))
+        print("Upload Successful")
+    except FileNotFoundError:
+        print("The file was not found")
+    except NoCredentialsError:
+        print("Credentials not available")
+
+    kwargs['ti'].xcom_push(key='monitoring_sites_to_reporting_areas_s3_object_path', value='/'.join(file_path.split('/')[1:]))
+
 
 
 ################# SQL #################
@@ -192,6 +239,8 @@ def create_staging_tables_if_not_existing(**kwargs):
     import duckdb
 
     create_staging_tables_query = '''
+        CREATE SCHEMA IF NOT EXISTS staging;
+
         CREATE TABLE IF NOT EXISTS staging.stg_hourly_data
         (
             AQSID VARCHAR,
@@ -276,6 +325,16 @@ def create_staging_tables_if_not_existing(**kwargs):
             forecast_source VARCHAR,
             ValidDate DATE
         );
+
+        CREATE TABLE IF NOT EXISTS staging.stg_monitoring_sites_to_reporting_areas
+        (
+            ReportingAreaName VARCHAR,
+            ReportingAreaID VARCHAR,
+            SiteID VARCHAR,
+            SiteName VARCHAR,
+            SiteAgencyName VARCHAR,
+            ValidDate VARCHAR
+        )
     '''
 
     motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
