@@ -7,6 +7,8 @@ from airflow.models import Variable
 
 import duckdb
 
+from typing import Sequence
+
 
 motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
 
@@ -14,25 +16,25 @@ class S3ToMotherDuckInsertOperator(BaseOperator):
     """
     Operator to copy data from s3 parquet file into MotherDuck
     """
-    @apply_defaults
+    template_fields: Sequence[str] = ("s3_key",)
+
     def __init__(
         self,
         s3_bucket,
+        s3_key,
         table,
         *args, **kwargs
     ):
         super(S3ToMotherDuckInsertOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
+        self.s3_key = s3_key
         self.table = table
 
     def execute(self, context):
-        ti = context['ti']
-        s3_key = ti.xcom_pull(task_ids='hourly_data_task_group.write_daily_aqobs_data_to_s3_task', key='aqobs_s3_object_path')
-        s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
         insert_query = f"""
             INSERT OR IGNORE INTO {self.table}
-            SELECT * FROM '{s3_object}';
+            SELECT * FROM 's3://{self.s3_bucket}/{self.s3_key}';
         """
         conn.execute(insert_query)
 
@@ -40,42 +42,37 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
     """
     Operator to copy data from s3 parquet file into MotherDuck
     """
-    @apply_defaults
+    template_fields: Sequence[str] = ("date", "s3_key",) 
+
     def __init__(
         self,
         s3_bucket,
-        tg,
-        prev_task_id,
-        xcom_key,
+        s3_key,
         temp_table,
         table,
+        date,
         *args, **kwargs
     ):
         super(S3ToMotherDuckInsertNewRowsOperator, self).__init__(*args, **kwargs)
         self.s3_bucket = s3_bucket
-        self.tg = tg
-        self.prev_task_id = prev_task_id
-        self.xcom_key = xcom_key
+        self.s3_key = s3_key
         self.table = table
         self.temp_table = temp_table
+        self.date = date
 
     def execute(self, context):
-        ti = context['ti']
-        s3_key = ti.xcom_pull(task_ids=f'{self.tg}.{self.prev_task_id}', key=self.xcom_key)
-        print(s3_key)
-        s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
 
         create_temp_table_query = f"""
             CREATE OR REPLACE TABLE {self.temp_table}
-            AS ( SELECT * FROM '{s3_object}' );
+            AS ( SELECT * FROM 's3://{self.s3_bucket}/{self.s3_key}' );
         """
         print(f'Executing query: {create_temp_table_query}')
         conn.execute(create_temp_table_query)
 
         table_update_query = f"""
             INSERT INTO {self.table}
-            SELECT *, current_date AS ValidDate
+            SELECT *, '{self.date}' AS ValidDate
             FROM {self.temp_table}
             WHERE NOT EXISTS (
                 SELECT * EXCLUDE (ValidDate) FROM {self.table}
