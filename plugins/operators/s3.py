@@ -31,7 +31,7 @@ class S3ToMotherDuckInsertOperator(BaseOperator):
         s3_object = f's3://{self.s3_bucket}/{s3_key}'
         conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
         insert_query = f"""
-            INSERT INTO {self.table}
+            INSERT OR IGNORE INTO {self.table}
             SELECT * FROM '{s3_object}';
         """
         conn.execute(insert_query)
@@ -66,39 +66,15 @@ class S3ToMotherDuckInsertNewRowsOperator(BaseOperator):
 
         create_temp_table_query = f"""
             CREATE OR REPLACE TABLE {self.temp_table}
-            AS ( SELECT *, 'yes' AS is_current FROM '{s3_object}' );
+            AS ( SELECT * FROM '{s3_object}' );
         """
         print(f'Executing query: {create_temp_table_query}')
         conn.execute(create_temp_table_query)
 
         table_update_query = f"""
-            CREATE OR REPLACE TABLE {self.table} AS (
-                WITH new_rows AS (
-                    SELECT *
-                    FROM {self.temp_table}
-                    WHERE NOT EXISTS ( SELECT * EXCLUDE(is_current) FROM {self.table} )
-                ), 
-                existing_table_no_current_status AS (
-                    SELECT * EXCLUDE(is_current) 
-                    FROM {self.table}
-                ), 
-                existing_table_status_updated AS (
-                    SELECT 
-                        *, 
-                        CASE
-                            WHEN EXISTS ( SELECT * FROM new_rows )
-                            THEN 'no'
-                            ELSE 'yes'
-                        END AS is_current
-                    FROM existing_table_no_current_status
-                ), 
-                updated_table AS (
-                    SELECT * FROM existing_table_status_updated
-                    UNION
-                    SELECT * FROM new_rows
-                )
-                SELECT * FROM updated_table
-            );
+            INSERT INTO {self.table}
+            SELECT *, current_date AS ValidDate
+            FROM {self.temp_table};
         """
         print(f'Executing query: {table_update_query}')
         conn.execute(table_update_query)

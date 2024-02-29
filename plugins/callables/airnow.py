@@ -11,7 +11,8 @@ from config.schemas import hourly_aqobs_file_schema, reporting_area_locations_v2
 from config.constants import DATA_PATH
 
 
-# HourlyAQObs Data Callables
+
+################# HourlyAQObs Data Callables #################
 
 def extract_aqobs_daily_data(ti, date: str, **kwargs):
     '''Extracts and dumps HourlyAQObs data files'''
@@ -25,7 +26,7 @@ def extract_aqobs_daily_data(ti, date: str, **kwargs):
         df = pl.read_csv(BytesIO(response.content), ignore_errors=True, schema=hourly_aqobs_file_schema)
         data.extend(df.to_dicts())
     
-    df = pl.DataFrame(data)
+    df = pl.DataFrame(data, schema=hourly_aqobs_file_schema)
 
     path = DATA_PATH / 'hourly_data' / date[:4]
     if not path.exists():
@@ -68,7 +69,7 @@ def cleanup_local_hourly_data_files(ti, **kwargs):
     os.remove(file_path)
 
 
-# Reporting Area Locations Callables
+################# Reporting Area Locations Callables #################
 
 def extract_reporting_area_locations(ti, date: str, **kwargs):
     '''Extracts data files provided on the reporting areas'''
@@ -126,7 +127,7 @@ def cleanup_reporting_area_location_files(ti, **kwargs):
     os.remove(file_path)
 
 
-# Monitoring Site Locations Callables
+################# Monitoring Site Locations Callables #################
     
 def extract_monitoring_site_locations(ti, date: str, **kwargs):
     '''Extracts data files provided on monitorinig sites'''
@@ -182,3 +183,111 @@ def cleanup_monitoring_site_location_files(ti, **kwargs):
     '''Cleanup files at data/moinitoring_sites/ '''
     file_path = ti.xcom_pull(task_ids='extract_monitoring_site_locations_task', key='monitoring_site_locations')
     os.remove(file_path)
+
+
+################# SQL #################
+
+def create_staging_tables_if_not_existing(**kwargs):
+    '''Set up staging tables'''
+    import duckdb
+
+    create_staging_tables_query = '''
+        CREATE TABLE IF NOT EXISTS staging.stg_hourly_data
+        (
+            AQSID VARCHAR,
+            SiteName VARCHAR,
+            Status VARCHAR,
+            EPARegion VARCHAR,
+            Latitude DOUBLE,
+            Longitude DOUBLE,
+            Elevation DOUBLE,
+            GMTOffset INTEGER,
+            CountryCode VARCHAR,
+            StateName VARCHAR,
+            ValidDate VARCHAR,
+            ValidTime VARCHAR,
+            DataSource VARCHAR,
+            ReportingArea_PipeDelimited VARCHAR,
+            OZONE_AQI INTEGER,
+            PM10_AQI INTEGER,
+            PM25_AQI INTEGER,
+            NO2_AQI INTEGER,
+            Ozone_Measured INTEGER,
+            PM10_Measured INTEGER,
+            PM25_Measured INTEGER,
+            NO2_Measured INTEGER,
+            PM25 DOUBLE,
+            PM25_Unit VARCHAR,
+            OZONE DOUBLE,
+            OZONE_Unit VARCHAR,
+            NO2 DOUBLE,
+            NO2_Unit VARCHAR,
+            CO DOUBLE,
+            CO_Unit VARCHAR,
+            SO2 DOUBLE,
+            SO2_Unit VARCHAR,
+            PM10 DOUBLE,
+            PM10_Unit VARCHAR,
+            UNIQUE (AQSID, ValidDate, ValidTime)
+        );
+
+        CREATE TABLE IF NOT EXISTS staging.stg_monitoring_sites 
+        (
+            StationID VARCHAR,
+            AQSID VARCHAR,
+            FullAQSID VARCHAR,
+            Parameter VARCHAR,
+            MonitorType VARCHAR,
+            SiteCode INTEGER,
+            SiteName VARCHAR,
+            Status VARCHAR,
+            AgencyID VARCHAR,
+            AgencyName VARCHAR,
+            EPARegion VARCHAR,
+            Latitude DOUBLE,
+            Longitude DOUBLE,
+            Elevation DOUBLE,
+            GMTOffset INTEGER,
+            CountryFIPS VARCHAR,
+            CBSA_ID VARCHAR,
+            CBSA_Name VARCHAR,
+            StateAQSCode INTEGER,
+            StateAbbreviation VARCHAR,
+            CountryAQSCode INTEGER,
+            CountryName VARCHAR,
+            ValidDate DATE
+        );
+
+        CREATE TABLE IF NOT EXISTS staging.stg_reporting_areas
+        (
+            reporting_area VARCHAR,
+            state_code VARCHAR,
+            country_code VARCHAR,
+            forecasts VARCHAR,
+            action_day_name VARCHAR,
+            latitude DOUBLE,
+            longitude DOUBLE,
+            gmt_offset INTEGER,
+            daylight_savings VARCHAR,
+            standard_time_zone_label VARCHAR,
+            daylight_savings_time_zone_label VARCHAR,
+            twc_code VARCHAR,
+            usa_today VARCHAR,
+            forecast_source VARCHAR,
+            ValidDate DATE
+        );
+    '''
+
+    motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
+    conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
+    conn.execute(create_staging_tables_query)
+
+def drop_temp_table(table: str, **kwargs):
+    import duckdb
+    motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
+    '''Drops temp table created in staging table updates'''
+    drop_table_query = f'''
+        DROP TABLE IF EXISTS {table}
+    '''
+    conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
+    conn.execute(drop_table_query)

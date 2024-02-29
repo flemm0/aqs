@@ -31,14 +31,20 @@ with DAG(
         # 'trigger_rule': 'all_success'
     },
     description='Extracts hourly-updated air quality measurements from Airnow API every day',
-    start_date=days_ago(4), # data is updated continuously for 48 hours after posting
-    # start_date=days_ago(30), # backfill starting from 30 days ago
+    # start_date=days_ago(4), # data is updated continuously for 48 hours after posting
+    start_date=datetime(2024, 1, 1), # backfill starting from Jan 1, 2024
     end_date=days_ago(4, hour=23),
     schedule_interval='0 0 * * *', # daily at midnight
     tags=['airnow'],
     max_active_runs=1, # prevent OOM issues when hosted on local
     catchup=True
 ) as dag:
+
+    create_staging_tables_if_not_existing_task = PythonOperator(
+        task_id='create_staging_tables_if_not_existing_task',
+        python_callable=create_staging_tables_if_not_existing,
+        provide_context=True
+    )
 
     extract_aqobs_daily_data_task = PythonOperator(
         task_id='extract_aqobs_daily_data_task',
@@ -128,9 +134,10 @@ with DAG(
     done = EmptyOperator(task_id='done')
 
 
-    
+    # execution order definitions
+    create_staging_tables_if_not_existing_task >> extract_aqobs_daily_data_task
     extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_motherduck_task >> cleanup_local_hourly_data_files_task
     cleanup_local_hourly_data_files_task >> [extract_reporting_area_locations_task, extract_monitoring_site_locations_task]
     extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> load_monitoring_site_locations_new_data_to_motherduck_task >> cleanup_monitoring_site_location_files_task
-    extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> load_reporting_area_locations_new_data_to_motherduck_task >> cleanup_reporting_area_location_files_task
+    extract_reporting_area_locations_task >> write_reporting_area_locations_to_s3_task >> load_reporting_area_locations_new_data_to_motherduck_task  >> cleanup_reporting_area_location_files_task
     [cleanup_monitoring_site_location_files_task, cleanup_reporting_area_location_files_task] >> done
