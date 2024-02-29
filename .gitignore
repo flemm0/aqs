@@ -167,3 +167,6 @@ standalone_admin_password.txt
 
 # test data folder
 data/
+
+# test dags
+dags/*test*.py
