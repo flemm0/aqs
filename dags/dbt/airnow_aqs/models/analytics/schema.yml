@@ -16,6 +16,9 @@ sources:
       - name: stg_monitoring_sites
         description: >
           Staging table containing information about the monitoring sites that send hourly air quality observations to the EPA
+      - name: stg_monitoring_sites_to_reporting_areas
+        description: >
+          Staging table with mapping information between reporting areas and monitoring sites
     
 models:
   - name: Fact_AQObs
