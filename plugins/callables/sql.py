@@ -112,6 +112,7 @@ def create_md_staging_tables_if_not_existing(**kwargs):
     conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}')
     conn.execute(create_staging_tables_query)
 
+
 def drop_temp_table(table: str, **kwargs):
     import duckdb
     motherduck_token = Variable.get('MOTHERDUCK_TOKEN')
@@ -127,35 +128,7 @@ def drop_temp_table(table: str, **kwargs):
 
 ################# Snowflake #################
     
-from airflow.hooks.base import BaseHook
-import snowflake.connector
-from airflow.models import Variable
-
-
-
-class SnowflakeHook(BaseHook):
-    '''
-    returns connection to Snowflake
-    '''
-
-    user = Variable.get('SNOWFLAKE_USERNAME')
-    password = Variable.get('SNOWFLAKE_PASSWORD')
-    account = Variable.get('SNOWFLAKE_ACCOUNT')
-    database = 'airnow_aqs'
-    schema = 'staging'
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, *kwargs)
-    
-    def get_conn(self):
-        conn = snowflake.connector.connect(
-            user=self.user,
-            password=self.password,
-            database=self.database,
-            account=self.account,
-            schema=self.schema
-        )
-        return conn
+from ..hooks import SnowflakeHook
 
 
 
@@ -266,8 +239,8 @@ def create_snowflake_tables_if_not_existing(**kwargs):
         );
         '''
     ]
-
-    with SnowflakeHook().get_conn() as conn:
-        cur = conn.cursor()
-        for query in create_tables_queries:
-            cur.execute(query)
+    
+    conn = SnowflakeHook().get_conn()
+    cur = conn.cursor()
+    for query in create_tables_queries:
+        cur.execute(query)
