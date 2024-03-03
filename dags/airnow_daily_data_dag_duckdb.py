@@ -9,6 +9,7 @@ from airflow.models import Variable
 from airflow.utils.task_group import TaskGroup
 
 from plugins.callables.airnow import *
+from plugins.callables.sql import create_md_staging_tables_if_not_existing
 from plugins.operators.s3 import S3ToMotherDuckInsertOperator, S3ToMotherDuckInsertNewRowsOperator
 
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
@@ -26,7 +27,7 @@ profile_config = ProfileConfig(
 
 
 with DAG(
-    'airnow_daily_data',
+    'airnow_daily_data_duckdb',
     default_args={
         'depends_on_past': False,
         'email_on_failure': False,
@@ -57,7 +58,7 @@ with DAG(
 
     create_staging_tables_if_not_existing_task = PythonOperator(
         task_id='create_staging_tables_if_not_existing_task',
-        python_callable=create_staging_tables_if_not_existing,
+        python_callable=create_md_staging_tables_if_not_existing,
         provide_context=True
     )
 
