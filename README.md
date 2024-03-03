@@ -14,7 +14,7 @@ Access to comprehensive air quality data empowers policymakers, researchers, and
 The ETL pipeline begins with data ingestion from the AirNow API, followed by conversion into the Parquet format for optimized storage efficiency. The Parquet format is chosen to minimize storage costs while maintaining data integrity. The transformed data is then securely stored in an Amazon S3 bucket.
 
 ##### Data Warehousing 
-Once stored in Amazon S3, the data is loaded into an Amazon Redshift data warehouse, where it undergoes further transformations and modeling. Leveraging the power of Redshift, the data is structured into a cohesive data model using DBT (Data Build Tool). This step prepares the data for seamless analysis and reporting.
+Once stored in Amazon S3, the data is loaded into a data warehouse using both the MotherDuck and Snowflake platforms, where it undergoes further transformations and modeling. I chose to use MotherDuck as it is a cloud data warehouse that is free to use until further notice so I can keep my data in there for longer, and Snowflake as they offer a free 30 day trial. The data is structured inside the warehouse into a cohesive data model using DBT (Data Build Tool), preparing the data for seamless analysis and reporting. 
 
 ##### Orchestration with Airflow
 Airflow serves as the backbone of the ETL pipeline, orchestrating and scheduling each step. Hosted within Docker containers, Airflow ensures reliable execution of daily data retrieval, storage, and loading processes.
