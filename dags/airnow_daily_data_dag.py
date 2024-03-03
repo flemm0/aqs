@@ -11,6 +11,20 @@ from airflow.utils.task_group import TaskGroup
 from plugins.callables.airnow import *
 from plugins.operators.s3 import S3ToMotherDuckInsertOperator, S3ToMotherDuckInsertNewRowsOperator
 
+from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
+
+
+
+
+
+# cosmos setup
+profile_config = ProfileConfig(
+    profile_name='airnow_aqs', 
+    target_name='dev',
+    profiles_yml_filepath='/home/airflow/.dbt/profiles.yml'
+)
+
+
 with DAG(
     'airnow_daily_data',
     default_args={
@@ -184,9 +198,21 @@ with DAG(
             load_monitoring_sites_to_reporting_areas_to_motherduck_task >> cleanup_monitoring_sites_to_reporting_areas_files_task
 
 
+    dbt_task_group = DbtTaskGroup(
+        project_config=ProjectConfig(
+        dbt_project_path=f'{os.environ["AIRFLOW_HOME"]}/dags/dbt/airnow_aqs',
+        env_vars={'HOME': '/home/airflow'}
+        ),
+        profile_config=profile_config,
+        execution_config=ExecutionConfig(
+            dbt_executable_path='/home/airflow/.local/bin/dbt',
+        ),
+    )
+
+
     done = EmptyOperator(task_id='done')
 
 
     # execution order definitions
 
-    create_staging_tables_if_not_existing_task >> tg1 >> [tg2, tg3] >> tg4 >> done
+    create_staging_tables_if_not_existing_task >> tg1 >> [tg2, tg3] >> tg4 >> dbt_task_group >> done

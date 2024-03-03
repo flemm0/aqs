@@ -75,7 +75,10 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data # Mount the data directory for local development
+    - ${AIRFLOW_PROJ_DIR:-.}/.dbt:/home/airflow/.dbt
   user: "${AIRFLOW_UID:-50000}:0"
+  env_file:
+    - .env
   depends_on:
     &airflow-common-depends-on
     redis:

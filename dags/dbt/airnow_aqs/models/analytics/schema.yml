@@ -43,5 +43,5 @@ models:
       - type: foreign_key
         expression: analytics.Bridge_ReportingAreas_MonitoringSites (monitoring_site_key)
 
-  - name: Bridge_ReportingArea_MonitoringSite
+  - name: Bridge_MonitoringSite_ReportingArea
     description: 'Bridge table containing mappings of monitoring sites to their respective reporting areas'

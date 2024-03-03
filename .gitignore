@@ -170,3 +170,6 @@ data/
 
 # test dags
 dags/*test*.py
+
+# dbt for Docker
+.dbt/

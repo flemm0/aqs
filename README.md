@@ -23,6 +23,10 @@ Designed with scalability and automation in mind, the pipeline architecture can 
 
 ![Data Pipeline](images/data_pipeline_diagram.png)
 
+Thanks to the [Cosmos](https://astronomer.github.io/astronomer-cosmos/index.html) library, I was able to orchestrate the DBT transformations from within Airflow as its own task group. Below is a picture of the Airflow DAG:
+
+![DAG](images/airnow_daily_data_dag.jpg)
+
 # Data Model
 
 ##### Fact Table
