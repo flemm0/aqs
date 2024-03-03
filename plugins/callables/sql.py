@@ -1,7 +1,5 @@
 from airflow.models import Variable
 
-from ..hooks import SnowflakeHook
-
 
 
 
@@ -129,13 +127,47 @@ def drop_temp_table(table: str, **kwargs):
 
 ################# Snowflake #################
     
+from airflow.hooks.base import BaseHook
+import snowflake.connector
+from airflow.models import Variable
+
+
+
+class SnowflakeHook(BaseHook):
+    '''
+    returns connection to Snowflake
+    '''
+
+    user = Variable.get('SNOWFLAKE_USERNAME')
+    password = Variable.get('SNOWFLAKE_PASSWORD')
+    account = Variable.get('SNOWFLAKE_ACCOUNT')
+    database = 'airnow_aqs'
+    schema = 'staging'
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, *kwargs)
+    
+    def get_conn(self):
+        conn = snowflake.connector.connect(
+            user=self.user,
+            password=self.password,
+            database=self.database,
+            account=self.account,
+            schema=self.schema
+        )
+        return conn
+
+
+
 def create_snowflake_tables_if_not_existing(**kwargs):
     '''Set up Snowflake staging schema'''
 
-    create_tables_query = '''
-        CREATE SCHEMA IF NOT EXISTS staging;
-
-        CREATE TABLE IF NOT EXISTS staging.stg_hourly_data
+    create_tables_queries = [
+        '''
+        CREATE SCHEMA IF NOT EXISTS airnow_aqs.staging;
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS airnow_aqs.staging.stg_hourly_data
         (
             AQSID VARCHAR(50),
             SiteName VARCHAR(50),
@@ -173,9 +205,9 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             PM10_Unit VARCHAR(50),
             UNIQUE (AQSID, ValidDate, ValidTime)
         );
-
-
-        CREATE TABLE IF NOT EXISTS staging.stg_monitoring_sites 
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS airnow_aqs.staging.stg_monitoring_sites 
         (
             StationID VARCHAR(50),
             AQSID VARCHAR(50),
@@ -201,9 +233,9 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             CountryName VARCHAR(50),
             ValidDate DATE
         );
-
-
-        CREATE TABLE IF NOT EXISTS staging.stg_reporting_areas
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS airnow_aqs.staging.stg_reporting_areas
         (
             reporting_area VARCHAR(50),
             state_code VARCHAR(50),
@@ -221,9 +253,9 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             forecast_source VARCHAR(50),
             ValidDate DATE
         );
-
-
-        CREATE TABLE IF NOT EXISTS staging.stg_monitoring_sites_to_reporting_areas
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS airnow_aqs.staging.stg_monitoring_sites_to_reporting_areas
         (
             ReportingAreaName VARCHAR(50),
             ReportingAreaID VARCHAR(50),
@@ -232,7 +264,10 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             SiteAgencyName VARCHAR(50),
             ValidDate VARCHAR(50)
         );
-    '''
+        '''
+    ]
 
-    cur = SnowflakeHook().get_conn().cursor()
-    cur.execute(create_tables_query)
+    with SnowflakeHook().get_conn() as conn:
+        cur = conn.cursor()
+        for query in create_tables_queries:
+            cur.execute(query)
