@@ -230,12 +230,12 @@ def create_snowflake_tables_if_not_existing(**kwargs):
         '''
         CREATE TABLE IF NOT EXISTS airnow_aqs.staging.stg_monitoring_sites_to_reporting_areas
         (
-            ReportingAreaName varchar(50),
+            ReportingAreaName varchar,
             ReportingAreaID varchar(50),
-            SiteID varchar(50),
-            SiteName varchar(50),
-            SiteAgencyName varchar(50),
-            ValidDate varchar(50)
+            SiteID varchar,
+            SiteName varchar,
+            SiteAgencyName varchar,
+            ValidDate varchar
         );
         '''
     ]
@@ -502,4 +502,76 @@ def insert_monitoring_site_data_to_snowflake(date, **kwargs) -> None:
 
     # Remove temp table
     drop_temp_table_query = "drop table if exists airnow_aqs.staging.tmp_stg_monitoring_sites;"
+    conn.cursor().execute(drop_temp_table_query)
+
+
+def load_monitoring_sites_to_reporting_areas_to_snowflake(date: str, **kwargs) -> None:
+    '''Inserts monitoring site to reporting area mapping from S3 into Snowflake'''
+
+    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="monitoring_sites_to_reporting_areas_task_group.write_monitoring_sites_to_reporting_areas_to_s3_task", key="monitoring_sites_to_reporting_areas_s3_object_path")}'
+
+    conn = SnowflakeHook().get_conn()
+
+    # Create external stage
+    create_temp_stage_query = """
+    create temporary stage my_s3_stage
+        url = 's3://airnow-aq-data-lake'
+        credentials =(AWS_KEY_ID=%s AWS_SECRET_KEY=%s)
+    """
+    conn.cursor().execute(
+        create_temp_stage_query,
+        (Variable.get('AWS_ACCESS_KEY_ID'), Variable.get('AWS_SECRET_ACCESS_KEY'),)
+    )
+
+    # Create temp table
+    create_temp_table_query = """
+    create or replace temporary table airnow_aqs.staging.tmp_stg_monitoring_sites_to_reporting_areas (
+        ReportingAreaName varchar,
+        ReportingAreaID varchar(50),
+        SiteID varchar,
+        SiteName varchar,
+        SiteAgencyName varchar
+    );
+    """
+    conn.cursor().execute(create_temp_table_query)
+
+    # Load data from stage into temp table 
+    load_temp_table_query = """
+    copy into airnow_aqs.staging.tmp_stg_monitoring_sites_to_reporting_areas from (
+        select
+            $1:ReportingAreaName::varchar,
+            $1:ReportingAreaID::varchar(50),
+            $1:SiteID::varchar,
+            $1:SiteName::varchar,
+            $1:SiteAgencyName::varchar
+        from @my_s3_stage
+    )
+    file_format = ( type = 'parquet' )
+    pattern = %s;
+    """
+    conn.cursor().execute(
+        load_temp_table_query,
+        (pattern,)
+    )
+
+    # Insert new rows
+    insert_new_rows_query = """
+    insert into airnow_aqs.staging.stg_monitoring_sites_to_reporting_areas
+    select *, %s as ValidDate
+    from
+    (
+        select *
+        from airnow_aqs.staging.tmp_stg_monitoring_sites_to_reporting_areas
+        except
+        select * exclude(ValidDate)
+        from airnow_aqs.staging.stg_monitoring_sites_to_reporting_areas
+    );
+    """
+    conn.cursor().execute(
+        insert_new_rows_query,
+        (date,)
+    )
+    
+    # Remove temp table
+    drop_temp_table_query = "drop table if exists airnow_aqs.staging.tmp_stg_monitoring_sites_to_reporting_areas;"
     conn.cursor().execute(drop_temp_table_query)

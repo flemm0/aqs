@@ -33,17 +33,6 @@ with DAG(
         'email_on_retry': False,
         'retries': 0,
         'retry_delay': timedelta(minutes=1),
-        # 'queue': 'bash_queue',
-        # 'pool': 'backfill',
-        # 'priority_weight': 10,
-        # 'wait_for_downstream': False,
-        # 'sla': timedelta(hours=2),
-        # 'execution_timeout': timedelta(seconds=300),
-        # 'on_failure_callback': some_function, # or list of functions
-        # 'on_success_callback': some_other_function, # or list of functions
-        # 'on_retry_callback': another_function, # or list of functions
-        # 'sla_miss_callback': yet_another_function, # or list of functions
-        # 'trigger_rule': 'all_success'
     },
     description='Extracts hourly-updated air quality measurements from Airnow API every day',
     start_date=days_ago(4), # data is updated continuously for 48 hours after posting
@@ -159,6 +148,39 @@ with DAG(
 
         extract_monitoring_site_locations_task >> write_monitoring_site_locations_to_s3_task >> \
             load_monitoring_sites_to_snowflake_task >> cleanup_monitoring_site_location_files_task
+
+
+
+    with TaskGroup(group_id='monitoring_sites_to_reporting_areas_task_group') as tg4:
+
+        extract_monitoring_sites_to_reporting_areas_task = PythonOperator(
+            task_id='extract_monitoring_sites_to_reporting_areas_task',
+            python_callable=extract_monitoring_sites_to_reporting_areas,
+            op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
+            provide_context=True
+        )
+
+        write_monitoring_sites_to_reporting_areas_to_s3_task = PythonOperator(
+            task_id='write_monitoring_sites_to_reporting_areas_to_s3_task',
+            python_callable=write_monitoring_sites_to_reporting_areas_to_s3,
+            provide_context=True
+        )
+
+        load_monitoring_sites_to_reporting_areas_to_snowflake_task = PythonOperator(
+            task_id='load_monitoring_sites_to_reporting_areas_to_snowflake_task',
+            python_callable=load_monitoring_sites_to_reporting_areas_to_snowflake,
+            op_kwargs={'date': "{{ ds }}"},
+            provide_context=True
+        )
+
+        cleanup_monitoring_sites_to_reporting_areas_files_task = BashOperator(
+            task_id='cleanup_monitoring_sites_to_reporting_areas_files_task',
+            bash_command="rm /opt/airflow/{{ ti.xcom_pull(task_ids='monitoring_sites_to_reporting_areas_task_group.extract_monitoring_sites_to_reporting_areas_task', key='monitoring_sites_to_reporting_areas') }}",
+            dag=dag
+        )
+
+        extract_monitoring_sites_to_reporting_areas_task >> write_monitoring_sites_to_reporting_areas_to_s3_task >> \
+            load_monitoring_sites_to_reporting_areas_to_snowflake_task >> cleanup_monitoring_sites_to_reporting_areas_files_task
 
 
     done = EmptyOperator(task_id='done')
