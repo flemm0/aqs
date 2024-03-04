@@ -188,10 +188,10 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             Parameter varchar(50),
             MonitorType varchar(50),
             SiteCode number(10, 0),
-            SiteName varchar(50),
+            SiteName varchar,
             Status varchar(50),
             AgencyID varchar(50),
-            AgencyName varchar(50),
+            AgencyName varchar,
             EPARegion varchar(50),
             Latitude float,
             Longitude float,
@@ -199,7 +199,7 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             GMTOffset number(10, 0),
             CountryFIPS varchar(50),
             CBSA_ID varchar(50),
-            CBSA_Name varchar(50),
+            CBSA_Name varchar,
             StateAQSCode number(10, 0),
             StateAbbreviation varchar(50),
             CountryAQSCode number(10, 0),
@@ -310,6 +310,7 @@ def insert_hourly_data_to_snowflake(**kwargs):
 
 
 def insert_reporting_area_data_to_snowflake(date: str, **kwargs):
+    '''Inserts reporting area data from S3 to Snowflake'''
 
     pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="reporting_areas_task_group.extract_reporting_area_locations_task", key="reporting_area_locations")}'
 
@@ -395,4 +396,110 @@ def insert_reporting_area_data_to_snowflake(date: str, **kwargs):
 
     # Remove temp table
     drop_temp_table_query = "drop table if exists airnow_aqs.staging.tmp_stg_reporting_areas;"
+    conn.cursor().execute(drop_temp_table_query)
+
+
+def insert_monitoring_site_data_to_snowflake(date, **kwargs) -> None:
+    '''Inserts monitoring site data from S3 into Snowflake'''
+
+    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="monitoring_sites_task_group.extract_monitoring_site_locations_task", key="monitoring_sites_s3_object_path")}'
+
+    conn = SnowflakeHook().get_conn()
+
+    # Create external stage
+    create_temp_stage_query = """
+    create temporary stage my_s3_stage
+        url = 's3://airnow-aq-data-lake'
+        credentials =(AWS_KEY_ID=%s AWS_SECRET_KEY=%s)
+    """
+    conn.cursor().execute(
+        create_temp_stage_query,
+        (Variable.get('AWS_ACCESS_KEY_ID'), Variable.get('AWS_SECRET_ACCESS_KEY'),)
+    )
+
+    # Create temp table
+    create_temp_table_query = """
+    create or replace temporary table airnow_aqs.staging.tmp_stg_monitoring_sites (
+        StationID varchar(50),
+        AQSID varchar(50),
+        FullAQSID varchar(50),
+        Parameter varchar(50),
+        MonitorType varchar(50),
+        SiteCode number(10, 0),
+        SiteName varchar,
+        Status varchar(50),
+        AgencyID varchar(50),
+        AgencyName varchar,
+        EPARegion varchar(50),
+        Latitude float,
+        Longitude float,
+        Elevation float,
+        GMTOffset number(10, 0),
+        CountryFIPS varchar(50),
+        CBSA_ID varchar(50),
+        CBSA_Name varchar,
+        StateAQSCode number(10, 0),
+        StateAbbreviation varchar(50),
+        CountryAQSCode number(10, 0),
+        CountryName varchar(50)
+    );
+    """
+    conn.cursor().execute(create_temp_table_query)
+
+    # Load data from stage into temp table 
+    load_temp_table_query = """
+    copy into airnow_aqs.staging.tmp_stg_monitoring_sites from (
+        select
+            $1:StationID::varchar(50),
+            $1:AQSID::varchar(50),
+            $1:FullAQSID::varchar(50),
+            $1:Parameter::varchar(50),
+            $1:MonitorType::varchar(50),
+            $1:SiteCode::number(10, 0),
+            $1:SiteName::varchar,
+            $1:Status::varchar(50),
+            $1:AgencyID::varchar(50),
+            $1:AgencyName::varchar,
+            $1:EPARegion::varchar(50),
+            $1:Latitude::float,
+            $1:Longitude::float,
+            $1:Elevation::float,
+            $1:GMTOffset::number(10, 0),
+            $1:CountryFIPS::varchar(50),
+            $1:CBSA_ID::varchar(50),
+            $1:CBSA_Name::varchar,
+            $1:StateAQSCode::number(10, 0),
+            $1:StateAbbreviation::varchar(50),
+            $1:CountryAQSCode::number(10, 0),
+            $1:CountryName::varchar(50)
+        from @my_s3_stage
+    )
+    file_format = ( type = 'parquet' )
+    pattern = %s;
+    """
+    conn.cursor().execute(
+        load_temp_table_query,
+        (pattern,)
+    )
+
+    # Insert new rows
+    insert_new_rows_query = """
+    insert into airnow_aqs.staging.stg_monitoring_sites
+    select *, %s as ValidDate
+    from
+    (
+        select *
+        from airnow_aqs.staging.tmp_stg_monitoring_sites
+        except
+        select * exclude(ValidDate)
+        from airnow_aqs.staging.stg_monitoring_sites
+    );
+    """
+    conn.cursor().execute(
+        insert_new_rows_query,
+        (date,)
+    )
+
+    # Remove temp table
+    drop_temp_table_query = "drop table if exists airnow_aqs.staging.tmp_stg_monitoring_sites;"
     conn.cursor().execute(drop_temp_table_query)
