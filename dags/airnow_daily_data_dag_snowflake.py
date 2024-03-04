@@ -9,7 +9,7 @@ from airflow.models import Variable
 from airflow.utils.task_group import TaskGroup
 
 from plugins.callables.airnow import *
-from plugins.callables.sql import create_snowflake_tables_if_not_existing
+from plugins.callables.sql import create_snowflake_tables_if_not_existing, insert_hourly_data_to_snowflake
 
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 
@@ -31,7 +31,7 @@ with DAG(
         'depends_on_past': False,
         'email_on_failure': False,
         'email_on_retry': False,
-        'retries': 1,
+        'retries': 0,
         'retry_delay': timedelta(minutes=1),
         # 'queue': 'bash_queue',
         # 'pool': 'backfill',
@@ -61,9 +61,39 @@ with DAG(
         provide_context=True
     )
 
+    with TaskGroup(group_id='hourly_data_task_group') as tg1:
+
+        extract_aqobs_daily_data_task = PythonOperator(
+            task_id='extract_aqobs_daily_data_task',
+            python_callable=extract_aqobs_daily_data,
+            op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
+            provide_context=True
+        )
+
+        write_daily_aqobs_data_to_s3_task = PythonOperator(
+            python_callable=write_daily_aqobs_data_to_s3,
+            task_id='write_daily_aqobs_data_to_s3_task',
+            provide_context=True
+        )
+
+        load_hourly_data_to_snowflake_task = PythonOperator(
+            task_id='load_hourly_data_to_snowflake_task',
+            python_callable=insert_hourly_data_to_snowflake,
+            provide_context=True,
+            dag=dag
+        )
+
+        cleanup_local_hourly_data_files_task = BashOperator(
+            task_id='cleanup_local_hourly_data_files_task',
+            bash_command='rm /opt/airflow/{{ ti.xcom_pull(task_ids="hourly_data_task_group.extract_aqobs_daily_data_task", key="aqobs_data") }}',
+            dag=dag
+        )
+
+        extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_snowflake_task >> cleanup_local_hourly_data_files_task
+
 
 
     done = EmptyOperator(task_id='done')
 
 
-    create_staging_tables_if_not_existing_task >> done
+    create_staging_tables_if_not_existing_task >> tg1 >> done

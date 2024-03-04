@@ -154,8 +154,8 @@ def create_snowflake_tables_if_not_existing(**kwargs):
             StateName VARCHAR(50),
             ValidDate VARCHAR(50),
             ValidTime VARCHAR(50),
-            DataSource VARCHAR(50),
-            ReportingArea_PipeDelimited VARCHAR(50),
+            DataSource VARCHAR,
+            ReportingArea_PipeDelimited VARCHAR,
             OZONE_AQI NUMBER(10, 0),
             PM10_AQI NUMBER(10, 0),
             PM25_AQI NUMBER(10, 0),
@@ -244,3 +244,66 @@ def create_snowflake_tables_if_not_existing(**kwargs):
     cur = conn.cursor()
     for query in create_tables_queries:
         cur.execute(query)
+
+
+def insert_hourly_data_to_snowflake(**kwargs):
+    '''Inserts hourly observation data to Snowflake staging table'''
+
+    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="hourly_data_task_group.write_daily_aqobs_data_to_s3_task", key="aqobs_s3_object_path")}'
+    print(pattern)
+
+    conn = SnowflakeHook().get_conn()
+
+    create_temp_stage_query = """
+    CREATE TEMPORARY STAGE my_s3_stage
+        URL = 's3://airnow-aq-data-lake'
+        CREDENTIALS =(AWS_KEY_ID=%s AWS_SECRET_KEY=%s)
+    """
+    conn.cursor().execute(
+        create_temp_stage_query,
+        (Variable.get('AWS_ACCESS_KEY_ID'), Variable.get('AWS_SECRET_ACCESS_KEY'),)
+    )
+
+    insert_data_query = """
+    copy into airnow_aqs.testing.stg_hourly_data from (
+        select
+            $1:AQSID::varchar(50),
+            $1:SiteName::varchar(50),
+            $1:Status::varchar(50),
+            $1:EPARegion::varchar(50),
+            $1:Latitude::float,
+            $1:Longitude::float,
+            $1:Elevation::float,
+            $1:GMTOffset::number(10),
+            $1:CountryCode::varchar(50),
+            $1:StateName::varchar(50),
+            $1:ValidDate::varchar(50),
+            $1:ValidTime::varchar(50),
+            $1:DataSource::varchar,
+            $1:ReportingArea_PipeDelimited::varchar,
+            $1:OZONE_AQI::number(10, 0),
+            $1:PM10_AQI::number(10, 0),
+            $1:PM25_AQI::number(10, 0),
+            $1:NO2_AQI::number(10, 0),
+            $1:Ozone_Measured::number(10, 0),
+            $1:PM10_Measured::number(10, 0),
+            $1:PM25_Measured::number(10, 0),
+            $1:NO2_Measured::number(10, 0),
+            $1:PM25::float,
+            $1:PM25_Unit::varchar(50),
+            $1:OZONE::float,
+            $1:OZONE_Unit::varchar(50),
+            $1:NO2::float,
+            $1:NO2_Unit::varchar(50),
+            $1:CO::float,
+            $1:CO_Unit::varchar(50),
+            $1:SO2::float,
+            $1:SO2_Unit::varchar(50),
+            $1:PM10::float,
+            $1:PM10_Unit::varchar(50)
+        from @my_s3_stage
+    )
+    file_format = ( type = 'parquet' )
+    pattern = %s;
+    """
+    conn.cursor().execute(insert_data_query, (pattern,))
