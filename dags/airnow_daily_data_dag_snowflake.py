@@ -9,7 +9,7 @@ from airflow.models import Variable
 from airflow.utils.task_group import TaskGroup
 
 from plugins.callables.airnow import *
-from plugins.callables.sql import create_snowflake_tables_if_not_existing, insert_hourly_data_to_snowflake
+from plugins.callables.sql import *
 
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 
@@ -91,9 +91,38 @@ with DAG(
 
         extract_aqobs_daily_data_task >> write_daily_aqobs_data_to_s3_task >> load_hourly_data_to_snowflake_task >> cleanup_local_hourly_data_files_task
 
+    with TaskGroup(group_id='reporting_areas_task_group') as tg2:
+
+        extract_reporting_area_locations_task = PythonOperator(
+            task_id='extract_reporting_area_locations_task',
+            python_callable=extract_reporting_area_locations,
+            op_kwargs={'date': "{{ macros.ds_format(ds, '%Y-%m-%d', '%Y%m%d') }}"},
+            provide_context=True
+        )
+
+        write_reporting_area_locations_to_s3_task = PythonOperator(
+            python_callable=write_reporting_area_locations_to_s3,
+            task_id='write_reporting_area_locations_to_s3_task',
+            provide_context=True
+        )
+
+        load_reporting_areas_to_snowflake_task = PythonOperator(
+            task_id='load_reporting_areas_to_snowflake_task',
+            python_callable=insert_reporting_area_data_to_snowflake,
+            op_kwargs={'date': "{{ ds }}"},
+            provide_context=True
+        )
+
+        cleanup_reporting_area_location_files_task = BashOperator(
+            task_id='cleanup_reporting_area_location_files_task',
+            bash_command="rm /opt/airflow/{{ ti.xcom_pull(task_ids='reporting_areas_task_group.extract_reporting_area_locations_task', key='reporting_area_locations') }}",
+            dag=dag
+        )
+
+
 
 
     done = EmptyOperator(task_id='done')
 
 
-    create_staging_tables_if_not_existing_task >> tg1 >> done
+    create_staging_tables_if_not_existing_task >> tg1 >> tg2 >> done
