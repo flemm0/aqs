@@ -265,7 +265,7 @@ def insert_hourly_data_to_snowflake(**kwargs):
     )
 
     insert_data_query = """
-    copy into airnow_aqs.testing.stg_hourly_data from (
+    copy into airnow_aqs.staging.stg_hourly_data from (
         select
             $1:AQSID::varchar(50),
             $1:SiteName::varchar(50),
