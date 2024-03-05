@@ -4,6 +4,8 @@
     )
 }}
 
+{%set target_name = target.name %}
+
 with 
     new_rows as (
         select *
@@ -11,7 +13,11 @@ with
 
         {% if is_incremental() %}
 
-        where strptime(ValidDate, '%m/%d/%Y') > ( select max(strptime(date_key, '%Y%m%d')) from {{ this }})
+            {% if target_name == 'prod' %}
+            where to_date(ValidDate, 'MM/DD/YYYY') > ( select max(to_date(date_key, 'YYYYMMDD')) from {{ this }})
+            {% else %}
+            where strptime(ValidDate, '%m/%d/%Y') > ( select max(strptime(date_key, '%Y%m%d')) from {{ this }})
+            {% endif %}
 
         {% endif %}
 ),
@@ -38,8 +44,16 @@ with
         select
             monitoring_site_key,
             reporting_area_key,
+            {% if target_name == 'prod' %}
+            to_char(to_date(ValidDate, 'MM/DD/YYYY'), 'YYYYMMDD') as date_key,
+            {% else %}
             strftime(strptime(ValidDate, '%m/%d/%Y'), '%Y%m%d') as date_key,
+            {% endif %}
+            {% if target_name == 'prod' %}
+            date_part(hour, to_time(ValidTime)) as hour,
+            {% else %}
             cast( ValidTime[:2] as integer ) as hour,
+            {% endif %}
             OZONE_AQI as ozone_aqi,
             OZONE as ozone_concentration,
             OZONE_Unit as ozone_unit,
