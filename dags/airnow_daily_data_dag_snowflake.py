@@ -3,7 +3,6 @@ from airflow.models.dag import DAG
 from airflow.operators.python import PythonOperator
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.providers.amazon.aws.operators.s3 import S3CreateObjectOperator
 from airflow.utils.dates import days_ago
 from airflow.models import Variable
 from airflow.utils.task_group import TaskGroup
@@ -12,6 +11,7 @@ from plugins.callables.airnow import *
 from plugins.callables.sql import *
 
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
+from cosmos.profiles import SnowflakeUserPasswordProfileMapping
 
 
 
@@ -35,8 +35,8 @@ with DAG(
         'retry_delay': timedelta(minutes=1),
     },
     description='Extracts hourly-updated air quality measurements from Airnow API every day',
-    start_date=days_ago(4), # data is updated continuously for 48 hours after posting
-    # start_date=datetime(2024, 1, 1),  # backfill starting from Jan 1, 2024
+    # start_date=days_ago(4), # data is updated continuously for 48 hours after posting
+    start_date=datetime(2024, 1, 1),  # backfill starting from Jan 1, 2024
     end_date=days_ago(4, hour=23),
     schedule_interval='0 0 * * *', # daily at midnight
     tags=['airnow'],
@@ -183,7 +183,20 @@ with DAG(
             load_monitoring_sites_to_reporting_areas_to_snowflake_task >> cleanup_monitoring_sites_to_reporting_areas_files_task
 
 
+
+    dbt_task_group = DbtTaskGroup(
+        project_config=ProjectConfig(
+        dbt_project_path=f'{os.environ["AIRFLOW_HOME"]}/dags/dbt/airnow_aqs',
+        env_vars={'HOME': '/home/airflow'}
+        ),
+        profile_config=profile_config,
+        execution_config=ExecutionConfig(
+            dbt_executable_path='/home/airflow/.local/bin/dbt',
+        ),
+    )
+
+
     done = EmptyOperator(task_id='done')
 
 
-    create_staging_tables_if_not_existing_task >> tg1 >> tg2 >> tg3 >> tg4 >> done
+    create_staging_tables_if_not_existing_task >> tg1 >> [tg2, tg3, tg4] >> dbt_task_group >> done
