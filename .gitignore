@@ -173,3 +173,7 @@ dags/*test*.py
 
 # dbt for Docker
 .dbt/
+
+# plotly dev
+etc/
+share/
