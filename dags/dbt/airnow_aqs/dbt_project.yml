@@ -24,3 +24,6 @@ models:
   airnow_aqs:
     analytics:
       +materialized: table
+    reporting:
+      +schema: reporting
+      +materialized: view
