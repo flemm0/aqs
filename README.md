@@ -41,3 +41,9 @@ The Fact_AQObs table serves as the central repository for air quality measuremen
 In addition to the core dimensions, a bridge table links monitoring sites to their respective reporting areas. This normalization step enhances data integrity and supports more efficient data querying and analysis processes.
 
 ![Data Model](images/AirNow_AQObs_Data_Model.png)
+
+# Dashboarding
+
+Aside from the main "analytics" schema in my data warehouse, I have also created some views in a "reporting" schema which pre-join the models together in a way that is ready for generating some nice visualizations. Below is screenshot of a dashboard, hosted by Snowflake, that I created showing a world map of the AQI parameters by date.
+
+![Dashboard](images/dashboard.png)
