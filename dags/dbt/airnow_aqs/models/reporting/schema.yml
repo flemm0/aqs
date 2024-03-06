@@ -1,0 +1,7 @@
+version: 2
+
+models:
+  - name: AQI_By_Monitoring_Site
+    description: Joined table with AQI measurements by monitoring site, includes latitude and longitude for easy plotting
+  - name: AQI_By_Reporting_Area
+    description: Joined table with AQI measurements by reporting area, includes latitude and longitude for easy plotting
