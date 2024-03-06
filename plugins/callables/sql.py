@@ -312,7 +312,7 @@ def insert_hourly_data_to_snowflake(**kwargs):
 def insert_reporting_area_data_to_snowflake(date: str, **kwargs):
     '''Inserts reporting area data from S3 to Snowflake'''
 
-    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="reporting_areas_task_group.extract_reporting_area_locations_task", key="reporting_area_locations")}'
+    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="reporting_areas_task_group.write_reporting_area_locations_to_s3_task", key="reporting_areas_s3_object_path")}'
 
     conn = SnowflakeHook().get_conn()
 
@@ -402,7 +402,7 @@ def insert_reporting_area_data_to_snowflake(date: str, **kwargs):
 def insert_monitoring_site_data_to_snowflake(date, **kwargs) -> None:
     '''Inserts monitoring site data from S3 into Snowflake'''
 
-    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="monitoring_sites_task_group.extract_monitoring_site_locations_task", key="monitoring_sites_s3_object_path")}'
+    pattern = f'.*{kwargs["task_instance"].xcom_pull(task_ids="monitoring_sites_task_group.write_monitoring_site_locations_to_s3_task", key="monitoring_sites_s3_object_path")}'
 
     conn = SnowflakeHook().get_conn()
 

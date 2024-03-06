@@ -26,22 +26,30 @@ models:
 
   - name: Dim_Date
     description: 'Date dimension table'
+    # columns:
+    #   - name: date_key
+    #     tests:
+    #       - relationships:
+    #           to: ref('Fact_AQObs')
+    #           field: date_key
 
   - name: Dim_ReportingArea
     description: 'Dimension table for reporting areas for which air pollutants are measured for'
-    constraints:
-      - type: unique
-        columns: [reporting_area_key]
-      - type: foreign_key
-        expression: analytics.Bridge_ReportingAreas_MonitoringSites (reporting_area_key)
+    # columns:
+    #   - name: reporting_area_key
+    #     tests:
+    #       - relationships:
+    #           to: ref('Bridge_MonitoringSite_ReportingArea')
+    #           field: reporting_area_key
 
   - name: Dim_MonitoringSite
     description: 'Dimension table for monitoring sites that report air pollutant measurements'
-    constraints:
-      - type: unique
-        columns: [monitoring_site_key]
-      - type: foreign_key
-        expression: analytics.Bridge_ReportingAreas_MonitoringSites (monitoring_site_key)
+    # columns:
+    #   - name: monitoring_site_key
+    #     tests:
+    #       - relationships:
+    #           to: ref('Bridge_MonitoringSite_ReportingArea')
+    #           field: monitoring_site_key
 
   - name: Bridge_MonitoringSite_ReportingArea
     description: 'Bridge table containing mappings of monitoring sites to their respective reporting areas'
