@@ -199,4 +199,4 @@ with DAG(
     done = EmptyOperator(task_id='done')
 
 
-    create_staging_tables_if_not_existing_task >> tg1 >> [tg2, tg3, tg4] >> dbt_task_group >> done
+    create_staging_tables_if_not_existing_task >> tg1 >> [tg2, tg3] >> tg4 >> dbt_task_group >> done
