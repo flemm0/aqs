@@ -28,11 +28,12 @@ tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 with tab1:
 
     df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;')
+    df.columns = [col.lower() for col in df.columns]
 
-    selected_date = st.selectbox('Select Date', df['FULL_DATE'].unique())
+    selected_date = st.selectbox('Select Date', df['full_date'].unique())
     selected_parameter = st.selectbox('Select Parameter', ['NO2', 'PM10', 'PM25', 'OZONE'])
 
-    filtered_df = df[df['FULL_DATE'] == selected_date]
+    filtered_df = df[df['full_date'] == selected_date]
     # Plot the world map
     world = gpd.read_file(gpd.datasets.get_path('naturalearth_cities'))
     fig = px.choropleth_mapbox(world, geojson=world.geometry, locations=world.index,
@@ -43,17 +44,17 @@ with tab1:
 
     # Add points to the map
     fig.add_scattermapbox(
-        lat=filtered_df['LATITUDE'],
-        lon=filtered_df['LONGITUDE'],
+        lat=filtered_df['latitude'],
+        lon=filtered_df['longitude'],
         mode='markers',
         marker=dict(
             # size=filtered_df[f'{selected_parameter}_AQI'],
-            color=filtered_df[f'{selected_parameter}_AQI'],
+            color=filtered_df[f'{selected_parameter}_AQI'.lower()],
             colorscale='RdBu',
             opacity=0.7,
             colorbar=dict(title=f'{selected_parameter} AQI')
         ),
-        hovertext=filtered_df['SITE_NAME']
+        hovertext=filtered_df['site_name']
     )
 
     # Update layout
@@ -103,14 +104,15 @@ with tab2:
         ORDER BY 1 DESC, 2;
     """
     df = conn.query(query)
+    df.columns = [col.lower() for col in df.columns]
     
     fig = px.line(
         df, 
-        x='FULL_DATE', 
-        y='AVG_AQI', 
+        x='full_date', 
+        y='avg_aqi', 
         title='AQI Trend', 
-        color='POLLUTANT_TYPE', 
-        line_group='POLLUTANT_TYPE'
+        color='pollutant_type', 
+        line_group='pollutant_type'
     )
     
     fig.update_layout(
