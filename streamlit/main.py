@@ -3,20 +3,20 @@ import pandas as pd
 import plotly.express as px
 import geopandas as gpd
 
-
+import duckdb
 
 
 # Setup
 
 st.set_page_config(layout='wide')
 
+try:
+    conn = st.connection('snowflake')
+except:
+    motherduck_token = st.secrets['MOTHERDUCK_TOKEN']
+    conn = duckdb.connect(f'md:clash_royale?motherduck_token={motherduck_token}', read_only=True)
 
-conn = st.connection('snowflake')
 
-df = conn.query('SELECT * FROM AQI_By_Monitoring_Site ORDER BY full_date DESC;')
-
-selected_date = st.sidebar.selectbox('Select Date', df['FULL_DATE'].unique())
-selected_parameter = st.sidebar.selectbox('Select Parameter', ['NO2', 'PM10', 'PM25', 'OZONE'])
 
 
 
@@ -26,7 +26,12 @@ selected_parameter = st.sidebar.selectbox('Select Parameter', ['NO2', 'PM10', 'P
 tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 
 with tab1:
-    
+
+    df = conn.query('SELECT * FROM AQI_By_Monitoring_Site ORDER BY full_date DESC;')
+
+    selected_date = st.selectbox('Select Date', df['FULL_DATE'].unique())
+    selected_parameter = st.selectbox('Select Parameter', ['NO2', 'PM10', 'PM25', 'OZONE'])
+
     filtered_df = df[df['FULL_DATE'] == selected_date]
     # Plot the world map
     world = gpd.read_file(gpd.datasets.get_path('naturalearth_cities'))
@@ -70,21 +75,53 @@ with tab1:
     )
 
 
-# with tab2:
+with tab2:
 
-#     fig = px.line(df, x='FULL_DATE', y=f'{selected_parameter}_AQI', title=f'{selected_parameter} AQI Trend',
-#                 # color=f'{selected_parameter}_AQI', line_group=f'{selected_parameter}_AQI',
-#                 labels={f'{selected_parameter}_AQI': 'Value', 'FULL_DATE': 'Date'})
+    query = """
+        SELECT full_date, 'PM10' AS pollutant_type, AVG(pm10_aqi) AS avg_aqi
+        FROM reporting.aqi_by_monitoring_site
+        GROUP BY 1
+
+        UNION ALL
+
+        SELECT full_date, 'PM2.5' AS pollutant_type, AVG(pm25_aqi) AS avg_aqi
+        FROM reporting.aqi_by_monitoring_site
+        GROUP BY 1
+
+        UNION ALL
+
+        SELECT full_date, 'Ozone' AS pollutant_type, AVG(ozone_aqi) AS avg_aqi
+        FROM reporting.aqi_by_monitoring_site
+        GROUP BY 1
+
+        UNION ALL
+
+        SELECT full_date, 'NO2' AS pollutant_type, AVG(no2_aqi) AS avg_aqi
+        FROM reporting.aqi_by_monitoring_site
+        GROUP BY 1
+
+        ORDER BY 1 DESC, 2;
+    """
+    df = conn.query(query)
     
-#     fig.update_layout(
-#         xaxis_title='FULL_DATE',
-#         yaxis_title=f'{selected_parameter} AQI',
-#         legend_title=f'{selected_parameter} AQI',
-#         height=1000
-#     )
+    fig = px.line(
+        df, 
+        x='FULL_DATE', 
+        y='AVG_AQI', 
+        title='AQI Trend', 
+        color='POLLUTANT_TYPE', 
+        line_group='POLLUTANT_TYPE'
+    )
     
-#     st.plotly_chart(
-#         fig,
-#         use_container_width=True,
-#         height=1000
-#     )
+    fig.update_layout(
+        xaxis_title='Date',
+        yaxis_title='Average AQI',
+        legend_title='Pollutant Type',
+        height=1000
+    )
+    
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        height=1000
+    )
