@@ -23,33 +23,40 @@ sources:
 models:
   - name: Fact_AQObs
     description: 'Fact table containing hourly air pollutant measurements from monitoring sites around the world'
+    # columns:
+    #   - name: pm10_aqi
+    #     tests:
+    #       - not_negative
+    #   - name: pm25_aqi
+    #     tests:
+    #       - not_negative
+    #   - name: ozone_aqi
+    #     tests: 
+    #       - not_negative
+    #   - name: no2_aqi
+    #     tests:
+    #       - not_negative
 
   - name: Dim_Date
     description: 'Date dimension table'
-    # columns:
-    #   - name: date_key
-    #     tests:
-    #       - relationships:
-    #           to: ref('Fact_AQObs')
-    #           field: date_key
+    columns:
+      - name: date_key
+        tests:
+          - not_null
 
   - name: Dim_ReportingArea
     description: 'Dimension table for reporting areas for which air pollutants are measured for'
-    # columns:
-    #   - name: reporting_area_key
-    #     tests:
-    #       - relationships:
-    #           to: ref('Bridge_MonitoringSite_ReportingArea')
-    #           field: reporting_area_key
+    columns:
+      - name: reporting_area_key
+        tests:
+          - not_null
 
   - name: Dim_MonitoringSite
     description: 'Dimension table for monitoring sites that report air pollutant measurements'
-    # columns:
-    #   - name: monitoring_site_key
-    #     tests:
-    #       - relationships:
-    #           to: ref('Bridge_MonitoringSite_ReportingArea')
-    #           field: monitoring_site_key
+    columns:
+      - name: monitoring_site_key
+        tests:
+          - not_null
 
   - name: Bridge_MonitoringSite_ReportingArea
     description: 'Bridge table containing mappings of monitoring sites to their respective reporting areas'
