@@ -27,7 +27,7 @@ tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 
 with tab1:
 
-    df = conn.query('SELECT * FROM AQI_By_Monitoring_Site ORDER BY full_date DESC;')
+    df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;')
 
     selected_date = st.selectbox('Select Date', df['FULL_DATE'].unique())
     selected_parameter = st.selectbox('Select Parameter', ['NO2', 'PM10', 'PM25', 'OZONE'])
