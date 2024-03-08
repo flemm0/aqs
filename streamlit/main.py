@@ -27,7 +27,11 @@ tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 
 with tab1:
 
-    df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;')
+    try:
+        df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;')
+    except:
+        df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;').to_df()
+    
     df.columns = [col.lower() for col in df.columns]
 
     selected_date = st.selectbox('Select Date', df['full_date'].unique())
@@ -103,7 +107,11 @@ with tab2:
 
         ORDER BY 1 DESC, 2;
     """
-    df = conn.query(query)
+    try:
+        df = conn.query(query)
+    except:
+        df = conn.query(query).to_df()
+    
     df.columns = [col.lower() for col in df.columns]
     
     fig = px.line(
