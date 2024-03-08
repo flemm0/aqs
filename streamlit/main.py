@@ -11,10 +11,10 @@ import duckdb
 st.set_page_config(layout='wide')
 
 try:
-    conn = st.connection('snowflake')
+    snowflake_conn = st.connection('snowflake')
 except:
     motherduck_token = st.secrets['MOTHERDUCK_TOKEN']
-    conn = duckdb.connect(f'md:clash_royale?motherduck_token={motherduck_token}', read_only=True)
+    md_conn = duckdb.connect(f'md:airnow_aqs?motherduck_token={motherduck_token}', read_only=True)
 
 
 
@@ -27,13 +27,21 @@ tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 
 with tab1:
 
-    try:
-        df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;')
-    except:
-        df = conn.query('SELECT * FROM airnow_aqs.reporting.AQI_By_Monitoring_Site ORDER BY full_date DESC;').to_df()
-    
-    df.columns = [col.lower() for col in df.columns]
+    query = """
+        SELECT 
+            full_date AS "full_date",
+            latitude AS "latitude",
+            longitude AS "longitude",
+            site_name AS "site_name"
+        FROM airnow_aqs.reporting.AQI_By_Monitoring_Site
+        ORDER BY full_date DESC;
+    """
 
+    try:
+        df = snowflake_conn.query(query)
+    except:
+        df = md_conn.query(query).df()
+    
     selected_date = st.selectbox('Select Date', df['full_date'].unique())
     selected_parameter = st.selectbox('Select Parameter', ['NO2', 'PM10', 'PM25', 'OZONE'])
 
@@ -83,37 +91,35 @@ with tab1:
 with tab2:
 
     query = """
-        SELECT full_date, 'PM10' AS pollutant_type, AVG(pm10_aqi) AS avg_aqi
+        SELECT full_date, 'PM10' AS "pollutant_type", AVG(pm10_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'PM2.5' AS pollutant_type, AVG(pm25_aqi) AS avg_aqi
+        SELECT full_date, 'PM2.5' AS "pollutant_type", AVG(pm25_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'Ozone' AS pollutant_type, AVG(ozone_aqi) AS avg_aqi
+        SELECT full_date, 'Ozone' AS "pollutant_type", AVG(ozone_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'NO2' AS pollutant_type, AVG(no2_aqi) AS avg_aqi
+        SELECT full_date, 'NO2' AS "pollutant_type", AVG(no2_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         ORDER BY 1 DESC, 2;
     """
     try:
-        df = conn.query(query)
+        df = snowflake_conn.query(query)
     except:
-        df = conn.query(query).to_df()
-    
-    df.columns = [col.lower() for col in df.columns]
-    
+        df = md_conn.query(query).df()
+        
     fig = px.line(
         df, 
         x='full_date', 
