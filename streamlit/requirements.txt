@@ -3,3 +3,4 @@ geopandas==0.14.3
 plotly==5.19.0
 duckdb==0.9.2
 snowflake-connector-python==3.7.1
+datetime

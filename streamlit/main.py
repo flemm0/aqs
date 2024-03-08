@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import geopandas as gpd
 
+from datetime import datetime
+
 import duckdb
 
 
@@ -27,12 +29,20 @@ tab1, tab2 = st.tabs(['World Map', 'Date Trend'])
 
 with tab1:
 
+    st.header('AQI Measurements at Sites Reporting to the EPA')
+
+    st.markdown('Feel free to zoom in on regions of interest.')
+
     query = """
         SELECT 
             full_date AS "full_date",
             latitude AS "latitude",
             longitude AS "longitude",
-            site_name AS "site_name"
+            site_name AS "site_name",
+            no2_aqi AS "no2_aqi",
+            pm10_aqi AS "pm10_aqi",
+            pm25_aqi AS "pm25_aqi",
+            ozone_aqi AS "ozone_aqi"
         FROM airnow_aqs.reporting.AQI_By_Monitoring_Site
         ORDER BY full_date DESC;
     """
@@ -60,8 +70,7 @@ with tab1:
         lon=filtered_df['longitude'],
         mode='markers',
         marker=dict(
-            # size=filtered_df[f'{selected_parameter}_AQI'],
-            color=filtered_df[f'{selected_parameter}_AQI'.lower()],
+            color=filtered_df[f'{selected_parameter}_aqi'.lower()],
             colorscale='RdBu',
             opacity=0.7,
             colorbar=dict(title=f'{selected_parameter} AQI')
@@ -71,7 +80,7 @@ with tab1:
 
     # Update layout
     fig.update_layout(
-        title=f'{selected_parameter} AQI Measurements Overlayed on World Map for {selected_date}',
+        title=f"{selected_parameter} AQI Measurements Overlayed on World Map for {selected_date.strftime('%B %d, %Y')}",
         mapbox=dict(
             style="carto-positron",
             zoom=1,
@@ -90,26 +99,29 @@ with tab1:
 
 with tab2:
 
+    st.header('Temporal Trends of AQI Measurements')
+    st.subheader('Averaged Across All Monitoring Sites')
+
     query = """
-        SELECT full_date, 'PM10' AS "pollutant_type", AVG(pm10_aqi) AS "avg_aqi"
+        SELECT full_date AS "full_date", 'PM10' AS "pollutant_type", AVG(pm10_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'PM2.5' AS "pollutant_type", AVG(pm25_aqi) AS "avg_aqi"
+        SELECT full_date AS "full_date", 'PM2.5' AS "pollutant_type", AVG(pm25_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'Ozone' AS "pollutant_type", AVG(ozone_aqi) AS "avg_aqi"
+        SELECT full_date AS "full_date", 'Ozone' AS "pollutant_type", AVG(ozone_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
         UNION ALL
 
-        SELECT full_date, 'NO2' AS "pollutant_type", AVG(no2_aqi) AS "avg_aqi"
+        SELECT full_date AS "full_date", 'NO2' AS "pollutant_type", AVG(no2_aqi) AS "avg_aqi"
         FROM reporting.aqi_by_monitoring_site
         GROUP BY 1
 
@@ -141,3 +153,10 @@ with tab2:
         use_container_width=True,
         height=1000
     )
+
+    left_co, cent_co,last_co = st.columns(3)
+    with cent_co:
+        st.write('Reference table:')
+        st.image(
+            'https://www.researchgate.net/publication/315006128/figure/tbl1/AS:614255149723648@1523461248015/EPAs-breakpoint-and-AQI-Index.png',
+        )
